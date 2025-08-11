@@ -12,8 +12,8 @@ export const actions = {
    * Public API para comentar em um post.
    * Aceita tanto o ElementHandle do post quanto a URL do post.
    */
-  async postComment(input: PostCommentInput): Promise<PostCommentResult> {
-    return postComment(input)
+  async postComment(page: Page, postUrl: string, message: string): Promise<PostCommentResult> {
+    return postComment({ page, postUrl, message })
   }
 }
 

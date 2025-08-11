@@ -1,6 +1,6 @@
+
 // backend/src/core/automations/facebook/utils/facebook-post-selectors.ts
-// Pacote de seletores + utilitários para detectar posts (e NÃO comentários) no feed/grupos do Facebook (Comet 2025)
-// Uso: import { findAllPosts, extractMetaFromPost, postClipBox } from '../utils/facebook-post-selectors'
+// Seletores otimizados baseados na análise real do Facebook (2025)
 
 export const FEED = '[role="feed"]'
 
@@ -12,14 +12,14 @@ export const EXCLUDE = [
   '[aria-label*="Responder"]',
   '[aria-label*="Write a comment"]',
   '[aria-label*="Escreva um comentário"]',
-  '[data-visualcompletion="ignore-dynamic"] [role="article"]', // popups/modais
+  '[data-visualcompletion="ignore-dynamic"] [role="article"]',
   '[data-pagelet*="Stories"]',
   '[aria-label*="Stories"]',
   '[aria-label*="Reels"]',
   'div[role="dialog"] *',
 ].join(', ')
 
-// Delimitadores do post (rodapé/ações)
+// Delimitadores do post (rodapé/ações) - MAIS ESPECÍFICOS
 export const ACTIONS = [
   '[role="toolbar"]',
   '[aria-label*="Actions for this post"]',
@@ -27,149 +27,211 @@ export const ACTIONS = [
   'div[role="group"]:has(button[aria-label*="Like"], button[aria-label*="Curtir"])',
   'div:has(> div[role="button"]:has-text("Like"))',
   'div:has(> div[role="button"]:has-text("Curtir"))',
+  'div:has(> div[role="button"]:has-text("Comentar"))',
+  'div:has(> div[role="button"]:has-text("Comment"))',
+  'div:has(> div[role="button"]:has-text("Compartilhar"))',
+  'div:has(> div[role="button"]:has-text("Share"))',
 ].join(', ')
 
-// Candidatos de container do POST.
+// Candidatos de container do POST - REFINADOS com base nas descobertas
 export const POST_CONTAINERS: string[] = [
-  `${FEED} > div ${'[role="article"]'}[aria-posinset]`,
-  `${FEED} ${'[role="article"]'}[aria-posinset]`,
-  `${FEED} :is(div,section,article) ${'[role="article"]'}:has(h3)`,
-  `${FEED} :is(div,section,article)[aria-posinset] :is([role="article"], article)`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/groups/"])`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/user/"])`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/people/"])`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/profile.php"])`,
-  `${FEED} ${'[role="article"]'}:has([aria-label][role="link"])`,
-  `${FEED} ${'[role="article"]'}:has([aria-posinset])`,
-  `${FEED} ${'[role="article"]'}:not(:has(${EXCLUDE}))`,
+  // Prioridade ALTA - Posts com role="article" e aria-posinset
+  `${FEED} > div [role="article"][aria-posinset]`,
+  `${FEED} [role="article"][aria-posinset]`,
+  
+  // Prioridade MÉDIA - Posts com role="article" mas sem comentários
+  `${FEED} [role="article"]:not(:has(${EXCLUDE}))`,
+  
+  // Fallbacks estruturais
+  `${FEED} div:has(h3 a[aria-label][role="link"]):not(:has(${EXCLUDE}))`,
+  `${FEED} div:has([data-ad-preview*="message"]):not(:has(${EXCLUDE}))`,
+  `${FEED} div:has([data-ad-comet-preview]):not(:has(${EXCLUDE}))`,
 ]
 
-// Seletores de AUTOR
+// Seletores de AUTOR - OTIMIZADOS baseado na análise
 export const AUTHOR: string[] = [
-  'h3 a[aria-label][role="link"]',
+  // Prioridade ALTA - padrões que bateram nas 5 amostras
   'a[aria-label][role="link"]',
+  'h3 a[aria-label][role="link"]',
   'h3 [role="link"]',
-  '[role="link"][tabindex]:not([tabindex="-1"])',
+  
+  // Fallbacks estruturais
   'a[role="link"][href*="/user/"]',
   'a[role="link"][href*="/people/"]',
   'a[role="link"][href*="/profile.php"]',
-  'h3 b > span',
-  'h3 strong > span',
+  'h3 strong a',
+  'h3 b a',
 ]
 
-// Seletores de TEXTO do post (preferir containers Comet de mensagem)
+// Seletores de TEXTO - OTIMIZADOS para Comet
 export const TEXT: string[] = [
+  // Prioridade ALTA - padrões Comet que bateram
   '[data-ad-preview*="message"]',
   '[data-ad-comet-preview]',
-  'div[dir] :is(div, span):not(:has(a,img,video,svg,button))',
-  'div[lang] :is(div, span):not(:has(a,img,video,svg,button))',
+  
+  // Fallbacks estruturais
+  'div[dir] div:not(:has(a,img,video,svg,button))',
+  'div[lang] div:not(:has(a,img,video,svg,button))',
+  '[data-testid*="post_message"]',
 ]
 
-// Seletores de IMAGEM principal (excluir ícones/emoji)
+// Seletores de IMAGEM - REFINADOS
 export const IMAGES: string[] = [
-  'img[src*="fbcdn"], img[src*="scontent"], img[src*="safe_image"]',
+  // Prioridade ALTA - padrões que funcionam
+  'img[src*="fbcdn"]',
+  'img[src*="scontent"]', 
+  'img[src*="safe_image"]',
+  
+  // Estruturais
   'a[href*="photo"] img',
-  'a[role="link"] img',
-  '[style*="background-image"]',
+  'a[role="link"] img:not([src*="emoji"]):not([src*="static"]):not([src*="sprited"])',
 ]
 
-// Seletores de PERMALINK do post
+// Seletores de PERMALINK
 export const PERMALINK: string[] = [
   'a[href*="/posts/"]',
   'a[href*="/permalink/"]',
   'a[aria-label] abbr',
+  '[data-testid*="story-subtitle"] a',
 ]
 
 // Utilitários ---------------------------------------------------------------
 export const pickFirst = async (root: any, selectors: string[]) => {
   for (const sel of selectors) {
-    const loc = root.locator(sel)
-    const count = await loc.count().catch(() => 0)
-    if (count) {
-      const el = await loc.first().elementHandle().catch(() => null)
-      if (el) return el
+    try {
+      const loc = root.locator(sel)
+      const count = await loc.count().catch(() => 0)
+      if (count > 0) {
+        const el = await loc.first().elementHandle().catch(() => null)
+        if (el) return el
+      }
+    } catch (err) {
+      // Continua para próximo seletor
     }
   }
   return null
 }
 
 export const findAllPosts = async (page: any) => {
-  let loc = page.locator(POST_CONTAINERS.join(', '))
-  // Filtro de visibilidade & exclusões
-  loc = loc.filter({ hasNot: page.locator(EXCLUDE) })
-  // Exigir barra de ações para ancorar o fim do post
-  loc = loc.filter({ has: page.locator(ACTIONS) })
-  return loc
+  const results = []
+  
+  // Tentar cada estratégia de detecção
+  for (const selector of POST_CONTAINERS) {
+    try {
+      let loc = page.locator(selector)
+      
+      // Filtro de visibilidade & exclusões
+      loc = loc.filter({ hasNot: page.locator(EXCLUDE) })
+      
+      // Exigir barra de ações para ancorar o fim do post
+      loc = loc.filter({ has: page.locator(ACTIONS) })
+      
+      const count = await loc.count()
+      console.log(`[findAllPosts] Seletor "${selector}" encontrou ${count} posts`)
+      
+      if (count > 0) {
+        for (let i = 0; i < count; i++) {
+          const post = await loc.nth(i).elementHandle()
+          if (post) results.push(post)
+        }
+        break // Se encontrou posts com este seletor, para aqui
+      }
+    } catch (err) {
+      console.log(`[findAllPosts] Erro no seletor "${selector}":`, err.message)
+    }
+  }
+  
+  return results
 }
 
 export async function extractMetaFromPost(el: any) {
-  // author
+  // Extrair autor
   const authorEl = await pickFirst(el, AUTHOR)
   let author: string | undefined
   if (authorEl) {
-    const txt = (await authorEl.textContent()) || ''
+    // Priorizar aria-label que funcionou nas amostras
     const aria = (await authorEl.getAttribute('aria-label')) || ''
-    author = (txt || aria).trim() || undefined
+    const txt = (await authorEl.textContent()) || ''
+    author = (aria || txt).trim() || undefined
   }
 
-  // texto
+  // Extrair texto (focar nos seletores Comet)
   let text = ''
   for (const sel of TEXT) {
-    const blocks = el.locator(sel)
-    const count = await blocks.count().catch(() => 0)
-    if (count) {
-      for (let i = 0; i < Math.min(count, 4); i++) {
-        const t = (await blocks.nth(i).innerText().catch(() => '')).trim()
-        if (t && t.length > 20) text += (text ? '\n\n' : '') + t
+    try {
+      const blocks = el.locator(sel)
+      const count = await blocks.count().catch(() => 0)
+      if (count > 0) {
+        for (let i = 0; i < Math.min(count, 3); i++) {
+          const t = (await blocks.nth(i).innerText().catch(() => '')).trim()
+          if (t && t.length > 10) {
+            text += (text ? '\n\n' : '') + t
+          }
+        }
+        if (text) break // Se encontrou texto, para
       }
-      if (text) break
+    } catch (err) {
+      // Continua para próximo seletor
     }
   }
-  const textPreview = text || undefined
 
-  // imagem
+  // Extrair imagem (evitar emoji/static/sprited)
   let imageUrl: string | undefined
   for (const sel of IMAGES) {
-    const imgs = el.locator(sel)
-    const n = await imgs.count().catch(() => 0)
-    for (let i = 0; i < n; i++) {
-      const handle = await imgs.nth(i).elementHandle().catch(() => null)
-      if (!handle) continue
-      const tag = await handle.evaluate((node: any) => node.tagName.toLowerCase())
-      let src: string | null = null
-      if (tag === 'img') src = await handle.getAttribute('src')
-      else src = await handle.evaluate((node: HTMLElement) => getComputedStyle(node).backgroundImage.replace(/^url\(["']?|["']?\)$/g, ''))
-      if (!src) continue
-      const low = src.toLowerCase()
-      if (low.includes('emoji') || low.includes('static') || low.includes('sprited')) continue
-      imageUrl = src
-      break
+    try {
+      const imgs = el.locator(sel)
+      const n = await imgs.count().catch(() => 0)
+      for (let i = 0; i < n; i++) {
+        const src = await imgs.nth(i).getAttribute('src')
+        if (!src) continue
+        
+        const low = src.toLowerCase()
+        if (low.includes('emoji') || low.includes('static') || low.includes('sprited')) continue
+        
+        imageUrl = src
+        break
+      }
+      if (imageUrl) break
+    } catch (err) {
+      // Continua
     }
-    if (imageUrl) break
   }
 
-  // permalink
+  // Extrair URL do post
   let url: string | undefined
-  for (const sel of PERMALINK) {
-    const a = el.locator(sel)
-    const count = await a.count().catch(() => 0)
-    if (count) {
-      const href = await a.first().getAttribute('href')
-      if (href) { url = href; break }
-    }
+  const permalinkEl = await pickFirst(el, PERMALINK)
+  if (permalinkEl) {
+    url = await permalinkEl.getAttribute('href')
   }
 
-  return { author, text: textPreview, image: imageUrl, url }
+  return { 
+    author, 
+    text: text || undefined, 
+    image: imageUrl, 
+    url 
+  }
 }
 
-// Heurística para screenshot: do topo do artigo até as ações
-export async function postClipBox(el: any, page: any) {
-  const postBox = await el.boundingBox()
-  if (!postBox) return null
-  const actions = await pickFirst(el, [ACTIONS])
-  if (!actions) return postBox
-  const actBox = await actions.boundingBox()
-  if (!actBox) return postBox
-  const height = Math.min(postBox.height, (actBox.y + actBox.height) - postBox.y)
-  return { x: postBox.x, y: postBox.y, width: postBox.width, height }
+// Screenshot do post (do topo até as ações)
+export async function postClipBox(el: any, page?: any) {
+  try {
+    const postBox = await el.boundingBox()
+    if (!postBox) return null
+    
+    const actions = await pickFirst(el, ACTIONS.split(', '))
+    if (!actions) return postBox
+    
+    const actBox = await actions.boundingBox()
+    if (!actBox) return postBox
+    
+    const height = Math.min(postBox.height, (actBox.y + actBox.height) - postBox.y)
+    return { 
+      x: postBox.x, 
+      y: postBox.y, 
+      width: postBox.width, 
+      height 
+    }
+  } catch (err) {
+    return null
+  }
 }
