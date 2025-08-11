@@ -37,6 +37,38 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* GET SINGLE WORKFLOW                                                */
+/* ------------------------------------------------------------------ */
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const workflowId = req.params.id;
+
+    const { data: workflow, error } = await supabase
+      .from('workflows')
+      .select(`
+        *,
+        workflow_nodes(*)
+      `)
+      .eq('id', workflowId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Workflow not found' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json(workflow);
+  } catch (err) {
+    console.error('Error getting workflow:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/* ------------------------------------------------------------------ */
 /* GET WORKFLOW NODES                                                 */
 /* ------------------------------------------------------------------ */
 router.get('/:id/nodes', requireAuth, async (req, res) => {
@@ -160,43 +192,78 @@ router.post('/:id/start', requireAuth, async (req, res) => {
     const userId = req.user.id;
     const workflowId = req.params.id;
 
-    const { data: workflow, error } = await supabase
+    // Verificar se o workflow existe e pertence ao usuário
+    const { data: workflow, error: workflowError } = await supabase
       .from('workflows')
       .select(`
         *,
-        accounts!inner(*),
-        workflow_nodes!inner(*)
+        accounts(*)
       `)
       .eq('id', workflowId)
       .eq('user_id', userId)
       .single();
 
-    if (error || !workflow) return res.status(404).json({ error: 'Workflow not found' });
-
-    const accountStatus = Array.isArray(workflow.accounts)
-        ? workflow.accounts[0]?.status
-        : workflow.accounts?.status;
-
-    if (accountStatus !== 'ready') {
-      return res.status(400).json({ error: 'A conta do Facebook precisa estar logada e pronta.' });
+    if (workflowError) {
+      console.error('Workflow query error:', workflowError);
+      return res.status(404).json({ error: 'Workflow not found' });
     }
 
-    const activeNodes = workflow.workflow_nodes.filter((n: any) => n.is_active);
-    if (!activeNodes.length) return res.status(400).json({ error: 'Nenhum grupo ativo no workflow.' });
+    if (!workflow) {
+      return res.status(404).json({ error: 'Workflow not found' });
+    }
 
-    // Adiciona o job à fila
-    await workflowQueue.add(`workflow:${workflow.id}`, {
-      id: workflow.id,
-      account_id: workflow.account_id,
-      webhook_url: workflow.webhook_url,
-      nodes: activeNodes
+    // Verificar se há uma conta associada
+    if (!workflow.account_id) {
+      return res.status(400).json({
+        error: 'Workflow precisa ter uma conta do Facebook associada.'
+      });
+    }
+
+    // Buscar a conta
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('id', workflow.account_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError || !account) {
+      return res.status(400).json({
+        error: 'Conta do Facebook não encontrada.'
+      });
+    }
+
+    // Verificar se a conta está pronta
+    if (account.status !== 'ready') {
+      return res.status(400).json({
+        error: 'A conta do Facebook precisa estar logada e pronta.'
+      });
+    }
+
+    // Verificar se há nós de workflow
+    const { data: nodes, error: nodesError } = await supabase
+      .from('workflow_nodes')
+      .select('*')
+      .eq('workflow_id', workflowId)
+      .eq('is_active', true);
+
+    if (nodesError || !nodes || nodes.length === 0) {
+      return res.status(400).json({
+        error: 'Workflow precisa ter pelo menos um grupo ativo configurado.'
+      });
+    }
+
+    // Adicionar workflow à fila
+    await workflowQueue.add(`start-workflow-${workflowId}`, {
+      workflowId,
+      userId,
+      accountId: workflow.account_id
     });
 
-    // Atualiza o status no banco
-    await supabase.from('workflows').update({ status: 'running' }).eq('id', workflowId);
-
-    res.json({ msg: `Workflow ${workflowId} foi enfileirado para execução!` });
-
+    res.json({
+      message: 'Workflow iniciado com sucesso',
+      status: 'queued'
+    });
   } catch (err) {
     console.error('Error starting workflow:', err);
     res.status(500).json({ error: 'Internal server error' });

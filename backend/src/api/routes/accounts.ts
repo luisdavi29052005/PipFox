@@ -2,6 +2,7 @@ import express from 'express';
 import { requireAuth } from '../../middleware/requireAuth';
 import { supabase } from '../../services/supabaseClient';
 import { openLoginWindow } from '../../core/automations/facebook/session/login';
+import { logoutFacebookAndDeleteSession } from '../../core/automations/facebook/session/logout';
 import { checkAccountLimit } from '../../middleware/checkLimits';
 
 
@@ -74,35 +75,10 @@ router.post('/:id/login', requireAuth, async (req, res) => {
   // processo em background
   openLoginWindow(userId, accountId)
     .then(async ({ userDataDir, isLogged, storageStatePath, fbUserId }) => {
-      // checa colisão só dentro do MESMO usuário do sistema
-      if (isLogged && fbUserId) {
-        const { data: others, error: qErr } = await supabase
-          .from('accounts')
-          .select('id, fb_user_id')
-          .eq('user_id', userId)
-          .neq('id', accountId)
-
-        const hasClash = !qErr && others?.some(a => a.fb_user_id === fbUserId)
-        if (hasClash) {
-          await supabase
-            .from('accounts')
-            .update({
-              status: 'conflict',
-              fb_user_id: fbUserId,
-              session_data: {
-                userDataDir,
-                storageStatePath,
-                fb_user_id: fbUserId,
-                last_login_at: new Date().toISOString(),
-                reason: 'same_fb_user_as_other_account'
-              }
-            })
-            .eq('id', accountId)
-            .eq('user_id', userId)
-          console.warn(`[login] conflito: ${accountId} usa mesmo fb_user_id ${fbUserId}`)
-          return
-        }
-      }
+      // Remove a verificação de conflito - permite múltiplas contas do mesmo usuário
+      // usarem a mesma conta do Facebook
+      // A verificação de conflito seria apenas entre usuários diferentes do sistema,
+      // mas isso não é necessário implementar agora
 
       // grava sessão independente de ter logado ou não
       const payload = {
@@ -122,7 +98,31 @@ router.post('/:id/login', requireAuth, async (req, res) => {
         .eq('id', accountId)
         .eq('user_id', userId)
 
-      if (updErr) console.error('update accounts error', updErr)
+      if (updErr) {
+        console.error('update accounts error', updErr)
+        // Se for erro de constraint única no fb_user_id, ainda considera como sucesso
+        // pois o login foi realizado, apenas não conseguiu salvar o fb_user_id
+        if (updErr.code === '23505' && updErr.message.includes('fb_user_id')) {
+          console.log('[login] fb_user_id já existe, salvando sem o fb_user_id')
+          const payloadWithoutFbUserId = {
+            status: isLogged ? 'ready' : 'not_ready',
+            session_data: {
+              userDataDir,
+              storageStatePath,
+              fb_user_id: fbUserId || null,
+              last_login_at: new Date().toISOString()
+            }
+          }
+          
+          const { error: updErr2 } = await supabase
+            .from('accounts')
+            .update(payloadWithoutFbUserId)
+            .eq('id', accountId)
+            .eq('user_id', userId)
+            
+          if (updErr2) console.error('second update accounts error', updErr2)
+        }
+      }
     })
     .catch(async err => {
       console.error('login window error', err)
@@ -152,20 +152,76 @@ router.get('/:id/debug-session', requireAuth, async (req, res) => {
 
 
 /* -------------------------------------------------------------------- */
-/* POST /api/accounts/:id/logout – volta status se a conta é do user    */
+/* POST /api/accounts/:id/logout – logout completo do Facebook e limpa sessão */
 /* -------------------------------------------------------------------- */
 router.post('/:id/logout', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const accountId = req.params.id;
 
-  const { error } = await supabase                     // basta tentar update
-    .from('accounts')
-    .update({ status: 'not_ready' })
-    .eq('id', accountId)
-    .eq('user_id', userId);
+  try {
+    // Verifica se a conta existe e pertence ao usuário
+    const { data: account, error: fetchError } = await supabase
+      .from('accounts')
+      .select('id, status')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
 
-  if (error) return res.status(404).json({ error: 'Account not found' });
-  res.json({ msg: 'Session status reset.' });
+    if (fetchError || !account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Marca como fazendo logout
+    await supabase
+      .from('accounts')
+      .update({ status: 'logging_out' })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    // Resposta imediata para o frontend
+    res.json({ msg: 'Fazendo logout do Facebook e removendo sessão...' });
+
+    // Processo em background
+    try {
+      // Faz logout completo do Facebook e remove sessão
+      await logoutFacebookAndDeleteSession(userId, accountId);
+      
+      // Atualiza status para not_ready e limpa dados da sessão
+      await supabase
+        .from('accounts')
+        .update({ 
+          status: 'not_ready',
+          fb_user_id: null,
+          session_data: null 
+        })
+        .eq('id', accountId)
+        .eq('user_id', userId);
+
+      console.log(`[logout] Logout completo realizado para conta ${accountId}`);
+    } catch (logoutError) {
+      console.error('[logout] Erro durante logout:', logoutError);
+      
+      // Mesmo se der erro no logout do Facebook, limpa os dados locais
+      await supabase
+        .from('accounts')
+        .update({ 
+          status: 'not_ready',
+          fb_user_id: null,
+          session_data: { error: String(logoutError) }
+        })
+        .eq('id', accountId)
+        .eq('user_id', userId);
+    }
+  } catch (error) {
+    console.error('Error during logout process:', error);
+    
+    // Em caso de erro, pelo menos reseta o status
+    await supabase
+      .from('accounts')
+      .update({ status: 'error' })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+  }
 });
 
 

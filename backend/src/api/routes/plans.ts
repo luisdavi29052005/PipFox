@@ -134,48 +134,175 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   }
 
   // Função auxiliar para ativar a assinatura no banco de dados
-  const activateSubscription = async (subscription: Stripe.Subscription) => {
-    const userId = subscription.metadata.user_id;
-    const planId = subscription.metadata.plan_id;
+  const activateSubscription = async (customerId: string, subscriptionId: string) => {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
 
-    if (!userId || !planId) {
-      console.error(`ERRO CRÍTICO: Faltando metadados na assinatura ${subscription.id}`);
-      return;
+      // Find subscription by customer_id
+      const { data: existingSubscription, error: subError } = await supabase
+        .from('subscriptions')
+        .select('id, user_id, plan_id')
+        .eq('stripe_customer_id', customerId)
+        .single()
+
+      if (subError || !existingSubscription) {
+        console.error('Subscription not found for customer:', customerId)
+        return
+      }
+
+      // Validate the timestamp before creating Date object
+      const endTimestamp = subscription.current_period_end
+      const startTimestamp = subscription.current_period_start
+      
+      if (!endTimestamp || isNaN(endTimestamp)) {
+        console.error('Invalid subscription end timestamp:', endTimestamp)
+        return
+      }
+
+      const endDate = new Date(endTimestamp * 1000)
+      const startDate = new Date(startTimestamp * 1000)
+
+      // Validate the created Date object
+      if (isNaN(endDate.getTime())) {
+        console.error('Invalid date created from timestamp:', endTimestamp)
+        return
+      }
+
+      // Get the plan by stripe_price_id
+      const priceId = subscription.items.data[0]?.price?.id
+      let planId = existingSubscription.plan_id // Default to current plan
+      
+      if (priceId) {
+        const { data: plan } = await supabase
+          .from('plans')
+          .select('id')
+          .eq('limits->>stripe_price_id', priceId)
+          .single()
+          
+        if (plan) {
+          planId = plan.id
+        }
+      }
+
+      // Update subscription
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({
+          plan_id: planId,
+          status: 'active',
+          stripe_subscription_id: subscriptionId,
+          current_period_start: startDate.toISOString(),
+          current_period_end: endDate.toISOString(),
+          end_date: null // Clear end_date since it's active
+        })
+        .eq('id', existingSubscription.id)
+
+      if (error) {
+        console.error('Error updating subscription:', error)
+      } else {
+        console.log(`✅ Subscription activated for user ${existingSubscription.user_id}`)
+      }
+    } catch (error) {
+      console.error('Error in activateSubscription:', error)
     }
-
-    const subscriptionData = {
-      user_id: userId,
-      plan_id: planId,
-      status: 'active',
-      stripe_subscription_id: subscription.id,
-      stripe_customer_id: subscription.customer.toString(),
-      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-      end_date: null,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from('subscriptions')
-      .upsert(subscriptionData, { onConflict: 'user_id' });
-
-    if (error) {
-      console.error(`Erro ao ativar assinatura para o usuário ${userId}:`, error);
-    } else {
-      console.log(`✅ Assinatura ativada com sucesso para o usuário ${userId}.`);
-    }
-  };
+  }
 
   // Trata os eventos relevantes do Stripe
   switch (event.type) {
     case 'customer.subscription.created':
-    case 'customer.subscription.updated': {
-      const subscription = event.data.object as Stripe.Subscription;
-      if (subscription.status === 'active') {
-        await activateSubscription(subscription);
+        console.log('🔔 Subscription created:', event.data.object.id)
+        try {
+          await activateSubscription(event.data.object.customer as string, event.data.object.id)
+        } catch (error) {
+          console.error('Error handling subscription.created:', error)
+          return res.status(500).json({ error: 'Failed to process subscription creation' })
+        }
+        break
+
+      case 'customer.subscription.updated':
+        console.log('🔔 Subscription updated:', event.data.object.id)
+        try {
+          await activateSubscription(event.data.object.customer as string, event.data.object.id)
+        } catch (error) {
+          console.error('Error handling subscription.updated:', error)
+          return res.status(500).json({ error: 'Failed to process subscription update' })
+        }
+        break
+
+    case 'checkout.session.completed': {
+      console.log('🔔 Checkout session completed:', event.data.object.id)
+      const session = event.data.object as Stripe.CheckoutSession
+      
+      try {
+        // Recupera a sessão completa com os metadados da subscription
+        const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+          expand: ['subscription']
+        })
+
+        if (fullSession.subscription && typeof fullSession.subscription === 'object') {
+          const subscription = fullSession.subscription as Stripe.Subscription
+          const customerId = session.customer as string
+          const userId = subscription.metadata?.user_id
+          const planId = subscription.metadata?.plan_id
+
+          if (userId && customerId && planId) {
+            // Check if subscription already exists
+            const { data: existingSub } = await supabase
+              .from('subscriptions')
+              .select('id')
+              .eq('user_id', userId)
+              .single()
+
+            if (existingSub) {
+              // Update existing subscription
+              const { error: updateError } = await supabase
+                .from('subscriptions')
+                .update({ 
+                  stripe_customer_id: customerId,
+                  stripe_subscription_id: subscription.id,
+                  plan_id: planId,
+                  status: 'active'
+                })
+                .eq('id', existingSub.id)
+
+              if (updateError) {
+                console.error('Error updating subscription:', updateError)
+              } else {
+                console.log(`✅ Subscription updated for user ${userId}`)
+              }
+            } else {
+              // Create new subscription
+              const { error: createError } = await supabase
+                .from('subscriptions')
+                .insert({
+                  user_id: userId,
+                  plan_id: planId,
+                  stripe_customer_id: customerId,
+                  stripe_subscription_id: subscription.id,
+                  status: 'active',
+                  start_date: new Date().toISOString()
+                })
+
+              if (createError) {
+                console.error('Error creating subscription:', createError)
+              } else {
+                console.log(`✅ Subscription created for user ${userId}`)
+              }
+            }
+
+            // Agora ativa a subscription com todos os detalhes
+            await activateSubscription(customerId, subscription.id)
+          } else {
+            console.error('Missing metadata in checkout session:', { userId, customerId, planId })
+          }
+        }
+      } catch (error) {
+        console.error('Error handling checkout.session.completed:', error)
+        return res.status(500).json({ error: 'Failed to process checkout completion' })
       }
-      break;
+      break
     }
+
     case 'customer.subscription.deleted': {
       const subscription = event.data.object as Stripe.Subscription;
       await supabase

@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { User, Plus, LogIn, LogOut, Trash2, Activity, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
@@ -50,7 +49,7 @@ export default function Accounts() {
     try {
       setCreatingAccount(true)
       setError(null)
-      
+
       await createAccount({ name: newAccountName.trim() })
       setSuccess('Conta criada com sucesso!')
       setNewAccountName('')
@@ -68,7 +67,7 @@ export default function Accounts() {
     try {
       setProcessingAccount(accountId)
       setError(null)
-      
+
       await loginAccount(accountId)
       setSuccess('Processo de login iniciado. Uma nova janela será aberta.')
       await loadAccounts()
@@ -84,12 +83,20 @@ export default function Accounts() {
     try {
       setProcessingAccount(accountId)
       setError(null)
-      
+
       await logoutAccount(accountId)
-      setSuccess('Logout realizado com sucesso!')
+      setSuccess('Fazendo logout do Facebook e removendo sessão...')
+
+      // Recarrega as contas imediatamente para mostrar status "logging_out"
       await loadAccounts()
+
+      // Recarrega novamente após um tempo para pegar o status final
+      setTimeout(async () => {
+        await loadAccounts()
+        setSuccess('Logout completo realizado com sucesso!')
+      }, 3000)
     } catch (error) {
-      console.error('Error logging out account:', error)
+      console.error('Error during logout:', error)
       setError(error instanceof Error ? error.message : 'Erro ao fazer logout')
     } finally {
       setProcessingAccount(null)
@@ -102,7 +109,7 @@ export default function Accounts() {
     try {
       setProcessingAccount(accountId)
       setError(null)
-      
+
       await deleteAccount(accountId)
       setSuccess('Conta deletada com sucesso!')
       await loadAccounts()
@@ -120,6 +127,8 @@ export default function Accounts() {
         return <CheckCircle className="w-5 h-5 text-green-500" />
       case 'logging_in':
         return <Clock className="w-5 h-5 text-blue-500" />
+      case 'logging_out':
+        return <Clock className="w-5 h-5 text-orange-500" />
       case 'error':
       case 'conflict':
         return <AlertTriangle className="w-5 h-5 text-red-500" />
@@ -134,12 +143,14 @@ export default function Accounts() {
         return 'Conectada'
       case 'logging_in':
         return 'Fazendo login...'
+      case 'logging_out':
+        return 'Fazendo logout...'
+      case 'not_ready':
+        return 'Desconectada'
       case 'error':
         return 'Erro'
-      case 'conflict':
-        return 'Conflito'
       default:
-        return 'Desconectada'
+        return status
     }
   }
 
@@ -149,8 +160,11 @@ export default function Accounts() {
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
       case 'logging_in':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'logging_out':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'not_ready':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
       case 'error':
-      case 'conflict':
         return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'

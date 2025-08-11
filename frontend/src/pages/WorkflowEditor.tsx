@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Save, Plus, Trash2, Settings, ArrowLeft, Users } from 'lucide-react'
+import { Save, Plus, Trash2, Settings, ArrowLeft, Users, Edit, Check, X } from 'lucide-react'
 import { getWorkflow, getWorkflowNodes, createWorkflowNode, updateWorkflowNode, deleteWorkflowNode, getAccounts } from '../lib/api'
 import Layout from '../components/layout/Layout'
 import Sidebar from '../components/dashboard/Sidebar'
@@ -33,6 +33,15 @@ interface Workflow {
   status: string
 }
 
+interface EditingNode {
+  id: string
+  group_url: string
+  group_name: string
+  prompt: string
+  keywords: string
+  is_active: boolean
+}
+
 export default function WorkflowEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -44,6 +53,8 @@ export default function WorkflowEditor() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showAddNode, setShowAddNode] = useState(false)
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
+  const [editingNode, setEditingNode] = useState<EditingNode | null>(null)
   const [newNode, setNewNode] = useState({
     group_url: '',
     group_name: '',
@@ -74,7 +85,11 @@ export default function WorkflowEditor() {
       setAccounts(accountsRes || [])
     } catch (error) {
       console.error('Error loading workflow data:', error)
-      setError('Erro ao carregar dados do workflow')
+      if (error instanceof Error && error.message.includes('not found')) {
+        setError('Workflow não encontrado. Pode ter sido deletado ou você não tem permissão para acessá-lo.')
+      } else {
+        setError('Erro ao carregar dados do workflow')
+      }
     } finally {
       setLoading(false)
     }
@@ -112,6 +127,52 @@ export default function WorkflowEditor() {
     } catch (error) {
       console.error('Error adding node:', error)
       setError(error instanceof Error ? error.message : 'Erro ao adicionar grupo')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleStartEdit = (node: WorkflowNode) => {
+    setEditingNodeId(node.id)
+    setEditingNode({
+      id: node.id,
+      group_url: node.group_url,
+      group_name: node.group_name,
+      prompt: node.prompt,
+      keywords: node.keywords.join(', '),
+      is_active: node.is_active
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingNodeId(null)
+    setEditingNode(null)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingNode) return
+
+    try {
+      setSaving(true)
+      setError(null)
+      
+      const keywordsArray = editingNode.keywords.split(',').map(k => k.trim()).filter(k => k)
+      
+      await updateWorkflowNode(editingNode.id, {
+        group_url: editingNode.group_url,
+        group_name: editingNode.group_name,
+        prompt: editingNode.prompt,
+        keywords: keywordsArray,
+        is_active: editingNode.is_active
+      })
+      
+      setSuccess('Grupo atualizado com sucesso!')
+      setEditingNodeId(null)
+      setEditingNode(null)
+      await loadWorkflowData()
+    } catch (error) {
+      console.error('Error updating node:', error)
+      setError(error instanceof Error ? error.message : 'Erro ao atualizar grupo')
     } finally {
       setSaving(false)
     }
@@ -387,65 +448,165 @@ export default function WorkflowEditor() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3, delay: index * 0.1 }}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
+                      {editingNodeId === node.id && editingNode ? (
+                        // Edit Mode
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                              {node.group_name}
+                              Editando Grupo
                             </h3>
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              node.is_active 
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                            }`}>
-                              {node.is_active ? 'Ativo' : 'Inativo'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                            <strong>URL:</strong> {node.group_url}
-                          </p>
-                          {node.prompt && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                              <strong>Prompt:</strong> {node.prompt}
-                            </p>
-                          )}
-                          {node.keywords.length > 0 && (
-                            <div className="mb-2">
-                              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                <strong>Palavras-chave:</strong>
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {node.keywords.map((keyword, i) => (
-                                  <span
-                                    key={i}
-                                    className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                                  >
-                                    {keyword}
-                                  </span>
-                                ))}
-                              </div>
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                size="sm"
+                                onClick={handleSaveEdit}
+                                disabled={saving}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={handleCancelEdit}
+                                disabled={saving}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
                             </div>
-                          )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                URL do Grupo
+                              </label>
+                              <input
+                                type="url"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                                value={editingNode.group_url}
+                                onChange={(e) => setEditingNode({ ...editingNode, group_url: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Nome do Grupo
+                              </label>
+                              <input
+                                type="text"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                                value={editingNode.group_name}
+                                onChange={(e) => setEditingNode({ ...editingNode, group_name: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Prompt para Comentários
+                            </label>
+                            <textarea
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                              rows={3}
+                              value={editingNode.prompt}
+                              onChange={(e) => setEditingNode({ ...editingNode, prompt: e.target.value })}
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Palavras-chave (separadas por vírgula)
+                            </label>
+                            <input
+                              type="text"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                              value={editingNode.keywords}
+                              onChange={(e) => setEditingNode({ ...editingNode, keywords: e.target.value })}
+                            />
+                          </div>
+                          
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id={`edit_active_${node.id}`}
+                              className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                              checked={editingNode.is_active}
+                              onChange={(e) => setEditingNode({ ...editingNode, is_active: e.target.checked })}
+                            />
+                            <label htmlFor={`edit_active_${node.id}`} className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                              Grupo ativo
+                            </label>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2 ml-4">
-                          <Button
-                            size="sm"
-                            variant={node.is_active ? "secondary" : "default"}
-                            onClick={() => handleToggleNode(node.id, node.is_active)}
-                            disabled={saving}
-                          >
-                            {node.is_active ? 'Desativar' : 'Ativar'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => handleDeleteNode(node.id)}
-                            disabled={saving}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                      ) : (
+                        // View Mode
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                {node.group_name}
+                              </h3>
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                node.is_active 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                              }`}>
+                                {node.is_active ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                              <strong>URL:</strong> {node.group_url}
+                            </p>
+                            {node.prompt && (
+                              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                <strong>Prompt:</strong> {node.prompt}
+                              </p>
+                            )}
+                            {node.keywords.length > 0 && (
+                              <div className="mb-2">
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                  <strong>Palavras-chave:</strong>
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {node.keywords.map((keyword, i) => (
+                                    <span
+                                      key={i}
+                                      className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                                    >
+                                      {keyword}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 ml-4">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleStartEdit(node)}
+                              disabled={saving}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={node.is_active ? "secondary" : "default"}
+                              onClick={() => handleToggleNode(node.id, node.is_active)}
+                              disabled={saving}
+                            >
+                              {node.is_active ? 'Desativar' : 'Ativar'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => handleDeleteNode(node.id)}
+                              disabled={saving}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </motion.div>
                   ))
                 )}

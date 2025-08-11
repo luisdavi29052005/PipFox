@@ -58,7 +58,21 @@ export default function Workflows() {
       await loadWorkflows()
     } catch (error) {
       console.error('Error starting workflow:', error)
-      setError(error instanceof Error ? error.message : 'Erro ao iniciar workflow')
+      let errorMessage = 'Erro ao iniciar workflow'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Facebook precisa estar logada')) {
+          errorMessage = 'Você precisa conectar e fazer login em uma conta do Facebook primeiro. Vá para a página de Contas.'
+        } else if (error.message.includes('grupo ativo configurado')) {
+          errorMessage = 'O workflow precisa ter pelo menos um grupo ativo configurado.'
+        } else if (error.message.includes('Sessão não encontrada')) {
+          errorMessage = 'Sessão do Facebook expirou. Faça login novamente na página de Contas.'
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
+      setError(errorMessage)
     } finally {
       setProcessingWorkflow(null)
     }
