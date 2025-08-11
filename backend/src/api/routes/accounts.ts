@@ -247,6 +247,43 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 
+// DELETE /api/accounts/:id
+router.delete('/:id', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const accountId = req.params.id;
+
+  try {
+    // Verifica se a conta existe e pertence ao usuário
+    const { data: account, error: fetchError } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Deleta a conta
+    const { error: deleteError } = await supabase
+      .from('accounts')
+      .delete()
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      console.error('Error deleting account:', deleteError);
+      return res.status(500).json({ error: 'Failed to delete account' });
+    }
+
+    res.json({ success: true, message: 'Account deleted successfully' });
+  } catch (error) {
+    console.error('Error during account deletion:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/accounts/stats
 router.get('/stats', requireAuth, async (req, res) => {
   try {

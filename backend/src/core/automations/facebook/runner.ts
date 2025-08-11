@@ -96,23 +96,20 @@ export async function startRunner(cfg: WorkflowConfig) {
 
   const groups = (cfg.nodes ?? []).map(n => n.group_url).filter(Boolean)
   
-  const { data: account, error } = await supabase
-    .from('accounts')
-    .select('user_id')
-    .eq('id', cfg.account_id)
-    .single();
-
-  if (error || !account) {
-    console.error(`[runner] Erro ao buscar user_id para a conta ${cfg.account_id}:`, error);
+  console.log(`[runner] Configuração do workflow ${workflowId}:`, {
+    groups: groups.length,
+    groupUrls: groups
+  });
+  
+  if (groups.length === 0) {
+    console.log(`[runner] ⚠️ Nenhum grupo encontrado para o workflow ${workflowId}. Finalizando.`);
     running.delete(workflowId);
     return;
   }
-  
-  const userId = account.user_id;
 
   await runFacebookAutomation({
     workflowId,
-    userId,
+    userId: cfg.user_id,
     accountId: cfg.account_id,
     groups,
     n8nWebhookUrl: cfg.webhook_url || process.env.N8N_WEBHOOK_URL,

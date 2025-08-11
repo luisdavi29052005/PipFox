@@ -12,64 +12,126 @@ const connection = new IORedis({
 });
 
 console.log('🚀 Worker de Workflows iniciado...');
-console.log('HEADLESS mode:', process.env.HEADLESS);
+console.log('HEADLESS mode:', process.env.HEADLESS !== 'false');
 
-const worker = new Worker('workflow-jobs', async job => {
+// Worker para processar jobs de workflow
+const workflowWorker = new Worker('workflowQueue', async (job) => {
   console.log(`[worker] Processando job ${job.name} (ID: ${job.id})`);
 
-  // Aceita tanto jobs com nome fixo quanto dinâmico que começam com 'workflow:'
-  if (job.name === 'workflow-job' || job.name.startsWith('workflow:')) {
-    console.log(`[worker] Executando workflow job: ${job.name}`);
-    const config = job.data as WorkflowConfig;
-    await startRunner(config);
-    return;
-  }
+  try {
+    // Verifica se é um job de iniciar workflow
+    if (job.name.startsWith('start-workflow-')) {
+      const { workflowId, userId, accountId } = job.data;
+      
+      console.log(`[worker] Iniciando workflow ${workflowId} para conta ${accountId}`);
+      
+      // Busca os dados do workflow no banco
+      const { data: workflow, error: workflowError } = await supabase
+        .from('workflows')
+        .select('*')
+        .eq('id', workflowId)
+        .single();
 
-  // Se chegou aqui, verifica outros tipos de job
-  if (job.name === 'comment-job') {
-    const { leadId, postUrl, commentText } = job.data;
-    
-    // Precisamos buscar a conta associada a este lead para usar o contexto correto
-    const { data: leadData, error } = await supabase
-      .from('leads')
-      .select(`
-        node:workflow_nodes (
-          workflow:workflows (
-            account_id,
-            user_id
-          )
-        )
-      `)
-      .eq('id', leadId)
-      .single();
+      if (workflowError || !workflow) {
+        throw new Error(`Workflow não encontrado: ${workflowId}`);
+      }
 
-    if (error || !leadData) throw new Error(`Lead ${leadId} não encontrado para comentar.`);
-    
-    const accountInfo = leadData.node?.workflow;
-    if (!accountInfo) throw new Error(`Informações da conta não encontradas para o lead ${leadId}`);
+      // Busca os nodes do workflow
+      const { data: nodes, error: nodesError } = await supabase
+        .from('workflow_nodes')
+        .select('*')
+        .eq('workflow_id', workflowId)
+        .eq('is_active', true);
 
-    const context = await openContextForAccount(accountInfo.user_id, accountInfo.account_id);
-    const page = await context.newPage();
-    try {
-      await postComment(page, postUrl, commentText);
-      await supabase.from('leads').update({ status: 'comment_posted' }).eq('id', leadId);
-    } finally {
-      await context.close();
+      if (nodesError || !nodes || nodes.length === 0) {
+        throw new Error(`Nenhum node ativo encontrado para o workflow: ${workflowId}`);
+      }
+
+      // Atualiza status para running
+      await supabase
+        .from('workflows')
+        .update({ status: 'running' })
+        .eq('id', workflowId);
+
+      // Configura o workflow
+      const config: WorkflowConfig = {
+        id: workflowId,
+        account_id: accountId,
+        user_id: userId,
+        webhook_url: workflow.webhook_url,
+        nodes: nodes.map(node => ({
+          group_url: node.group_url
+        }))
+      };
+
+      // Inicia o runner
+      await startRunner(config);
+      
+      console.log(`[worker] Workflow ${workflowId} iniciado com sucesso`);
+      
+    } else if (job.name === 'post-comment') {
+      // Job para postar comentário
+      const { accountId, userId, postUrl, comment } = job.data;
+      await postComment({ accountId, userId, postUrl, comment });
+      
+    } else {
+      throw new Error(`Tipo de job desconhecido: ${job.name}`);
     }
-    return;
-  }
 
-  // Se chegou aqui, é um tipo de job não reconhecido
-  throw new Error(`Tipo de job desconhecido: ${job.name}`);
+  } catch (error) {
+    console.error(`Job ${job.id} (tipo: ${job.name}) falhou com o erro:`, error);
+    
+    // Se for um job de workflow, atualiza o status para error
+    if (job.name.startsWith('start-workflow-')) {
+      const { workflowId } = job.data;
+      await supabase
+        .from('workflows')
+        .update({ status: 'error' })
+        .eq('id', workflowId);
+    }
+    
+    throw error;
+  }
 }, { 
   connection,
-  concurrency: 5 // Permite até 5 jobs simultâneos
+  concurrency: 5,
+  maxStalledCount: 1,
+  stalledInterval: 30 * 1000,
+  maxmemoryPolicy: 'allkeys-lru'
 });
 
-worker.on('completed', (job) => {
-  console.log(`[worker] Job ${job.id} (tipo: ${job.name}) finalizado com sucesso.`);
+workflowWorker.on('completed', (job) => {
+  console.log(`[worker] ✅ Job ${job.id} completado: ${job.name}`);
 });
 
-worker.on('failed', (job, err) => {
-  console.error(`Job ${job?.id} (tipo: ${job?.name}) falhou com o erro: ${err.message}`);
+workflowWorker.on('failed', (job, err) => {
+  if (job) {
+    console.error(`[worker] ❌ Job ${job.id} (${job.name}) falhou:`, err.message);
+  } else {
+    console.error('[worker] ❌ Job failed:', err.message);
+  }
+});
+
+workflowWorker.on('error', (err) => {
+  // Ignora erros relacionados à chave de jobs concluídos
+  if (err.message.includes('Missing key for job') && err.message.includes('moveToDelayed')) {
+    console.log('[worker] ℹ️ Job finalizado com sucesso (ignorando erro de cleanup)');
+    return;
+  }
+  console.error('[worker] Erro no worker:', err.message);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('[worker] Encerrando worker...');
+  await workflowWorker.close();
+  await connection.quit();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[worker] Encerrando worker...');
+  await workflowWorker.close();
+  await connection.quit();
+  process.exit(0);
 });

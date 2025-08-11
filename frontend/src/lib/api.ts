@@ -85,19 +85,8 @@ export function debugAccountSession(id: string) {
   return req(`/api/accounts/${id}/debug-session`, { method: "GET" });
 }
 
-// Delete account (unified function)
-export const deleteAccount = async (accountId: string) => {
-  const response = await fetch(`${apiBase}/api/accounts/${accountId}`, {
-    method: 'DELETE',
-    credentials: 'include'
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(errorData.error || 'Erro ao deletar conta')
-  }
-
-  return response.json()
+export function deleteAccount(accountId: string) {
+  return req(`/api/accounts/${accountId}`, { method: 'DELETE' });
 }
 
 // Dashboard API
