@@ -1,0 +1,5 @@
+@"
+regex:sk_(live|test)_[0-9A-Za-z]{10,}
+***REMOVED***
+
+"@ | Set-Content .\redactions.txt

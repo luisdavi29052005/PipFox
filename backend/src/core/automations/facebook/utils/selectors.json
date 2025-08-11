@@ -1,0 +1,121 @@
+
+{
+  "strategies": {
+    "aria_semantic": {
+      "name": "ARIA Semântico (Prioridade Alta)",
+      "selector": "//div[@role='feed']//div[@role='article' and not(ancestor::div[@role='article'])]",
+      "reliability": "high",
+      "description": "Usa especificação ARIA para garantir máxima estabilidade"
+    },
+    "structural_filtering": {
+      "name": "Filtragem Estrutural",
+      "selector": "[role='feed'] [role='article']:not([role='article'] [role='article'])",
+      "reliability": "high", 
+      "description": "CSS equivalente da estratégia ARIA com filtragem estrutural"
+    },
+    "data_testid_fallback": {
+      "name": "Data-TestID Fallback",
+      "selector": "[data-testid*='story'], [data-testid*='post']",
+      "reliability": "medium",
+      "description": "Fallback usando data-testid do Facebook"
+    },
+    "attribute_compound": {
+      "name": "Atributos Compostos",
+      "selector": "div[data-pagelet*='FeedUnit'], div[class*='story'], div[class*='userContentWrapper']",
+      "reliability": "medium",
+      "description": "Combinação de múltiplos atributos estruturais"
+    },
+    "visual_heuristic": {
+      "name": "Heurística Visual",
+      "selector": "div:has(> div > div > div > span > h3 > span > strong > a)",
+      "reliability": "low",
+      "description": "Última tentativa baseada em padrões visuais"
+    }
+  },
+  "selectors": {
+    "feed": {
+      "primary": "[role='feed']",
+      "fallback": [
+        "[data-testid='NewsFeed']",
+        "[data-pagelet='FeedUnit_0']",
+        "div[id*='stream']",
+        "#contentArea div[role='main']"
+      ]
+    },
+    "validation": {
+      "comments": {
+        "selectors": [
+          "[aria-label*='Comment']",
+          "[aria-label*='Comentar']",
+          "[data-testid*='comment']",
+          "a[href*='/comment/']",
+          "span:contains('Comment')",
+          "span:contains('Comentar')"
+        ]
+      },
+      "author": {
+        "selectors": [
+          "h3 strong a",
+          "[role='link'][href*='/user/']",
+          "[data-testid*='story-subtitle'] a",
+          "span[dir='ltr'] > span > strong > a",
+          ".userContent .fwb a"
+        ]
+      },
+      "timestamp": {
+        "selectors": [
+          "a[href*='/posts/']",
+          "a[href*='/permalink/']", 
+          "[data-testid*='story-subtitle'] a[role='link']",
+          "abbr[data-utime]",
+          ".timestampContent"
+        ]
+      }
+    },
+    "permalink": {
+      "selectors": [
+        "a[href*='/posts/']",
+        "a[href*='/permalink/']",
+        "[data-testid*='story-subtitle'] a[role='link']",
+        "abbr[data-utime] ancestor::a",
+        ".timestampContent ancestor::a"
+      ]
+    },
+    "expand": {
+      "see_more": {
+        "selectors": [
+          "div[role='button']:has-text('See more')",
+          "div[role='button']:has-text('Ver mais')",
+          "[data-testid='story-subtitle'] + div div[role='button']",
+          "div[role='button'][aria-expanded='false']"
+        ]
+      }
+    },
+    "filters": {
+      "sponsored": {
+        "text": ["Sponsored", "Patrocinado", "Sugerido para você"]
+      },
+      "suggestions": {
+        "text": ["People you may know", "Pessoas que você talvez conheça", "Suggested for you"]
+      },
+      "reels": {
+        "text": ["Reel", "Video", "Watch"]
+      }
+    }
+  },
+  "rate_limiting": {
+    "default_capacity": 10,
+    "default_refill_rate": 2,
+    "default_interval_seconds": 5
+  },
+  "retry": {
+    "max_attempts": 3,
+    "base_delay_ms": 1000,
+    "backoff_multiplier": 1.5
+  },
+  "thresholds": {
+    "min_post_confidence": 0.7,
+    "max_empty_cycles": 8,
+    "scroll_patience_ms": 3000
+  }
+}

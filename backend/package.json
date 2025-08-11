@@ -1,0 +1,48 @@
+{
+  "name": "pipefox-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "db:start": "npx supabase start",
+    "db:reset": "npx supabase db reset --debug",
+    "worker": "tsx src/queue/worker.ts",
+    "test": "cross-env NODE_ENV=test vitest run",
+    "test:watch": "cross-env NODE_ENV=test vitest",
+    "test:setup": "node test/setup-test-env.js",
+    "test:api": "node test/api-test.js",
+    "test:load": "node test/load-test.js",
+    "test:token": "node test/getToken.js",
+    "test:create": "node test/criarWorkflow.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.53.0",
+    "bullmq": "^5.56.9",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "fs-extra": "^11.3.0",
+    "ioredis": "^5.7.0",
+    "node-fetch": "^3.3.2",
+    "p-limit": "^6.2.0",
+    "playwright": "^1.54.2",
+    "stripe": "^18.4.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.19.9",
+    "@types/supertest": "^6.0.3",
+    "cross-env": "^10.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "supertest": "^7.1.4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
