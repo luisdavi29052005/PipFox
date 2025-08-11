@@ -21,13 +21,31 @@ export interface RunnerInput {
 // Controle de workflows em execução
 const running = new Map<string, boolean>()
 
-async function sendToN8n(webhookUrl: string, payload: any): Promise<{ ok: boolean; reply?: string }> {
-  if (!webhookUrl) return { ok: false }
-  const res = await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-  if (!res.ok) return { ok: false }
-  const data = await res.json().catch(() => ({}))
-  const reply = data?.reply ?? data?.data?.reply ?? data?.comment
-  return { ok: true, reply }
+const sendToN8n = async (data: any) => {
+  const n8nUrl = process.env.N8N_WEBHOOK_URL
+  if (!n8nUrl) {
+    console.log('[runner] ⚠️ N8N_WEBHOOK_URL não configurada, pulando envio')
+    return
+  }
+
+  try {
+    const response = await fetch(n8nUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      timeout: 5000 // 5 segundos de timeout
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    console.log('[runner] ✅ Dados enviados para N8n')
+  } catch (error) {
+    console.error('[runner] ❌ Erro ao enviar para N8n:', error.message)
+    // Não propagar o erro para não quebrar o workflow
+    return
+  }
 }
 
 export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
@@ -37,7 +55,7 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
     console.log(`[runner] Workflow ${workflowId} não está marcado para rodar. Encerrando.`);
     return;
   }
-  
+
   const context = await openContextForAccount(userId, accountId, headless)
   const page = await context.newPage()
 
@@ -47,17 +65,24 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
       break
     }
 
-    console.log(`[runner] ▶️ Monitorando grupo: ${groupUrl}`)
+    // Verificar se o contexto ainda está ativo
+    if (context.browser() && context.browser().isConnected()) {
+      console.log(`[runner] ▶️ Monitorando grupo: ${groupUrl}`)
+    } else {
+      console.log(`[runner] ❌ Contexto do browser foi desconectado, encerrando workflow`)
+      break
+    }
 
     // Passa 'workflowId' e 'running' para dentro do monitor
-    for await (const post of monitorGroup(page, { groupUrl, workflowId, running })) {
+    try {
+      for await (const post of monitorGroup(page, { groupUrl, workflowId, running })) {
       if (!running.has(workflowId)) break
 
       console.log(`[runner] 📌 Novo post ${post.contentHash} de ${post.author ?? 'desconhecido'}`)
 
       let reply: string | undefined
       if (n8nWebhookUrl) {
-        const { ok, reply: r } = await sendToN8n(n8nWebhookUrl, {
+        await sendToN8n({
           kind: 'facebook_post',
           groupUrl,
           author: post.author,
@@ -66,13 +91,25 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
           url: post.url,
           contentHash: post.contentHash
         })
-        reply = ok ? r : undefined
       }
 
       if (reply) {
         const result = await actions.postComment(page, post.url, reply)
         console.log(result.ok ? `[runner] 💬 Comentário publicado` : `[runner] ⚠️ Falha ao comentar: ${result.error}`)
       }
+      }
+    } catch (monitorError) {
+      console.error(`[runner] ❌ Erro no monitoramento do grupo ${groupUrl}:`, monitorError.message)
+      
+      // Se o browser foi fechado, encerrar completamente
+      if (monitorError.message.includes('Target page, context or browser has been closed')) {
+        console.log(`[runner] 🛑 Browser fechado, encerrando workflow ${workflowId}`)
+        break
+      }
+      
+      // Para outros erros, tentar próximo grupo após delay
+      console.log(`[runner] ⏭️ Tentando próximo grupo em 5 segundos...`)
+      await new Promise(resolve => setTimeout(resolve, 5000))
     }
   }
 
@@ -95,12 +132,12 @@ export async function startRunner(cfg: WorkflowConfig) {
   running.set(workflowId, true) // Marca o workflow como "rodando"
 
   const groups = (cfg.nodes ?? []).map(n => n.group_url).filter(Boolean)
-  
+
   console.log(`[runner] Configuração do workflow ${workflowId}:`, {
     groups: groups.length,
     groupUrls: groups
   });
-  
+
   if (groups.length === 0) {
     console.log(`[runner] ⚠️ Nenhum grupo encontrado para o workflow ${workflowId}. Finalizando.`);
     running.delete(workflowId);
