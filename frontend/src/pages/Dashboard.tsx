@@ -1,3 +1,4 @@
+// Local: frontend/src/pages/Dashboard.tsx
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
@@ -32,6 +33,8 @@ interface Subscription {
   plan: {
     name: string
     limits: {
+      workflows: number
+      posts_per_day: number
       credits_per_month: number
     }
   }
@@ -74,11 +77,12 @@ export default function Dashboard() {
       setLoading(false)
     }
   }
-
-  const getRemainingCredits = () => {
-    if (!credits) return 0
-    return credits.total_credits - credits.used_credits
+  
+  // --- FUNÇÃO ADICIONADA AQUI ---
+  const formatLimit = (value: number) => {
+    return value === -1 ? 'Ilimitado' : value.toLocaleString('pt-BR')
   }
+  // --- FIM DA ADIÇÃO ---
 
   if (loading) {
     return (

@@ -1,310 +1,195 @@
-import express from 'express'
-import { supabase } from '../../services/supabaseClient'
-import { requireAuth } from '../../middleware/requireAuth'
-import Stripe from 'stripe'
+import express from 'express';
+import { supabase } from '../../services/supabaseClient';
+import { requireAuth } from '../../middleware/requireAuth';
+import Stripe from 'stripe';
 
-const router = express.Router()
+const router = express.Router();
 
-// Stripe
+// --- Configuração do Stripe ---
+// Inicializa o Stripe de forma segura, checando a existência da chave.
 if (!process.env.STRIPE_SECRET_KEY) {
-  console.warn('STRIPE_SECRET_KEY não encontrada no ambiente. Pagamentos desabilitados.')
+  console.warn('⚠️ STRIPE_SECRET_KEY não encontrada no ambiente. Funcionalidades de pagamento estarão desabilitadas.');
 }
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
-// GET /api/plans
+// --- Rotas da API ---
+
+/**
+ * @route GET /api/plans
+ * @description Retorna todos os planos disponíveis.
+ */
 router.get('/', async (req, res) => {
   try {
-    console.log('Fetching plans from database...')
-
     const { data: plans, error } = await supabase
       .from('plans')
       .select('*')
-      .order('price')
+      .order('price');
 
-    if (error) {
-      console.error('Database error:', error)
-      throw error
-    }
+    if (error) throw error;
 
-    console.log('Plans found:', plans?.length || 0)
-
+    // Se não houver planos, executa o script de setup uma vez.
     if (!plans || plans.length === 0) {
-      console.log('No plans found, running setup...')
-      try {
-        const { setupPlans } = await import('../../../scripts/setup-plans.js')
-        await setupPlans()
-
-        const { data: newPlans, error: reloadErr } = await supabase
-          .from('plans')
-          .select('*')
-          .order('price')
-        if (reloadErr) throw reloadErr
-
-        return res.json({ success: true, data: newPlans || [] })
-      } catch (setupError) {
-        console.error('Error during setup:', setupError)
-        return res.status(500).json({ success: false, error: 'Erro ao configurar planos' })
-      }
+      console.log('Nenhum plano encontrado, executando setup...');
+      const { setupPlans } = await import('../../../scripts/setup-plans.js');
+      await setupPlans();
+      const { data: newPlans } = await supabase.from('plans').select('*').order('price');
+      return res.json({ success: true, data: newPlans || [] });
     }
 
-    return res.json({ success: true, data: plans || [] })
-  } catch (err) {
-    console.error('Error fetching plans:', err)
-    return res.status(500).json({ success: false, error: 'Erro interno do servidor' })
+    return res.json({ success: true, data: plans });
+  } catch (err: any) {
+    console.error('Erro ao buscar planos:', err.message);
+    return res.status(500).json({ success: false, error: 'Erro interno do servidor ao buscar planos.' });
   }
-})
+});
 
-// POST /api/plans/checkout
+/**
+ * @route POST /api/plans/checkout
+ * @description Cria uma sessão de checkout do Stripe para um plano pago.
+ */
 router.post('/checkout', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(500).json({ success: false, error: 'Serviço de pagamento não configurado.' });
+
   try {
-    const userId = req.user.id
-    const { planId } = req.body
+    const userId = req.user.id;
+    const { planId } = req.body;
 
-    if (!planId) return res.status(400).json({ success: false, error: 'Plan ID é obrigatório' })
+    if (!planId) return res.status(400).json({ success: false, error: 'ID do plano é obrigatório.' });
 
-    // Buscar plano
     const { data: plan, error: planError } = await supabase
       .from('plans')
       .select('*')
       .eq('id', planId)
-      .single()
+      .single();
 
-    if (planError || !plan) return res.status(404).json({ success: false, error: 'Plano não encontrado' })
+    if (planError || !plan) return res.status(404).json({ success: false, error: 'Plano não encontrado.' });
 
-    // Plano gratuito → cria/ativa assinatura sem Stripe
-    if (Number(plan.price) === 0) {
-      await supabase
-        .from('subscriptions')
-        .update({ status: 'canceled', end_date: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('user_id', userId)
-        .eq('status', 'active')
+    const stripePriceId = plan.limits?.stripe_price_id;
+    if (!stripePriceId) return res.status(400).json({ success: false, error: 'Plano não configurado para pagamento.' });
 
-      const { data: subscription, error: subError } = await supabase
-        .from('subscriptions')
-        .insert({
-          user_id: userId,
-          plan_id: planId,
-          status: 'active',
-          start_date: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (subError) throw subError
-
-      return res.json({ success: true, data: { subscription, plan } })
-    }
-
-    // Planos pagos → criar sessão de Checkout
-    if (!stripe) return res.status(500).json({ success: false, error: 'Serviço de pagamento não configurado' })
-
-    const stripePriceId = plan.limits?.stripe_price_id
-    if (!stripePriceId) return res.status(400).json({ success: false, error: 'Plano não configurado para pagamento' })
-
-    const baseUrl = process.env.FRONTEND_URL || process.env.PUBLIC_URL
-    if (!baseUrl) return res.status(500).json({ success: false, error: 'FRONTEND_URL não configurada' })
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
       payment_method_types: ['card'],
+      mode: 'subscription',
       line_items: [{ price: stripePriceId, quantity: 1 }],
-      success_url: `${baseUrl}/plans?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${baseUrl}/plans?success=true`,
       cancel_url: `${baseUrl}/plans?canceled=true`,
-      client_reference_id: userId,
-      metadata: { user_id: String(userId), plan_id: String(planId) }
-    })
+      // Passa os metadados para a assinatura para que o webhook possa usá-los
+      subscription_data: {
+        metadata: {
+          user_id: userId,
+          plan_id: planId.toString(),
+        },
+      },
+    });
 
-    return res.json({ success: true, data: { checkout_url: session.url, session_id: session.id } })
-  } catch (err) {
-    console.error('Error creating checkout session:', err)
-    return res.status(500).json({ success: false, error: 'Erro interno do servidor' })
+    return res.json({ success: true, data: { checkout_url: session.url } });
+  } catch (err: any) {
+    console.error('Erro ao criar sessão de checkout:', err.message);
+    return res.status(500).json({ success: false, error: 'Erro ao iniciar o processo de pagamento.' });
   }
-})
+});
 
-// POST /api/plans/process-payment  (temporário, caso queira ativar sem webhook)
-router.post('/process-payment', requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id
-    const { planId, sessionId } = req.body
-
-    if (!planId) return res.status(400).json({ success: false, error: 'Plan ID é obrigatório' })
-
-    // Cancelar assinatura ativa anterior
-    await supabase
-      .from('subscriptions')
-      .update({ status: 'canceled', end_date: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('status', 'active')
-
-    // Criar nova assinatura
-    const { data: subscription, error: subError } = await supabase
-      .from('subscriptions')
-      .insert({
-        user_id: userId,
-        plan_id: planId,
-        status: 'active',
-        start_date: new Date().toISOString(),
-        stripe_subscription_id: sessionId || null,
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-
-    if (subError) throw subError
-
-    return res.json({ success: true, data: { subscription } })
-  } catch (err) {
-    console.error('Error processing payment:', err)
-    return res.status(500).json({ success: false, error: 'Erro interno do servidor' })
-  }
-})
-
-// GET /api/plans/subscription
+/**
+ * @route GET /api/plans/subscription
+ * @description Retorna a assinatura ativa do usuário.
+ */
 router.get('/subscription', requireAuth, async (req, res) => {
   try {
-    const userId = req.user.id
-
+    const userId = req.user.id;
     const { data: subscription, error } = await supabase
       .from('subscriptions')
       .select('*, plan:plans(*)')
       .eq('user_id', userId)
       .eq('status', 'active')
-      .single()
+      .single();
 
-    if (error && error.code !== 'PGRST116') throw error
+    if (error && error.code !== 'PGRST116') throw error; // Ignora erro de "nenhum resultado"
 
-    return res.json({ success: true, data: { subscription: subscription || null } })
-  } catch (err) {
-    console.error('Error fetching subscription:', err)
-    return res.status(500).json({ success: false, error: 'Erro interno do servidor' })
+    return res.json({ success: true, data: { subscription: subscription || null } });
+  } catch (err: any) {
+    console.error('Erro ao buscar assinatura:', err.message);
+    return res.status(500).json({ success: false, error: 'Erro interno do servidor.' });
   }
-})
+});
 
-// POST /api/plans/subscription/cancel
-router.post('/subscription/cancel', requireAuth, async (req, res) => {
+/**
+ * @route POST /api/plans/webhook
+ * @description Endpoint para receber eventos do Stripe.
+ */
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(500).json({ error: 'Webhook do Stripe não configurado.' });
+  }
+
+  const sig = req.headers['stripe-signature'] as string;
+  let event: Stripe.Event;
+
   try {
-    const userId = req.user.id
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err: any) {
+    console.error('Falha na verificação da assinatura do webhook:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
 
-    const { data: sub, error: fetchError } = await supabase
-      .from('subscriptions')
-      .select('stripe_subscription_id')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single()
+  // Função auxiliar para ativar a assinatura no banco de dados
+  const activateSubscription = async (subscription: Stripe.Subscription) => {
+    const userId = subscription.metadata.user_id;
+    const planId = subscription.metadata.plan_id;
 
-    if (fetchError || !sub) return res.status(404).json({ error: 'No active subscription found' })
-
-    if (sub.stripe_subscription_id && stripe) {
-      try {
-        await stripe.subscriptions.cancel(sub.stripe_subscription_id)
-      } catch (stripeErr) {
-        console.error('Error canceling Stripe subscription:', stripeErr)
-        return res.status(500).json({ error: 'Failed to cancel subscription with Stripe' })
-      }
+    if (!userId || !planId) {
+      console.error(`ERRO CRÍTICO: Faltando metadados na assinatura ${subscription.id}`);
+      return;
     }
+
+    const subscriptionData = {
+      user_id: userId,
+      plan_id: planId,
+      status: 'active',
+      stripe_subscription_id: subscription.id,
+      stripe_customer_id: subscription.customer.toString(),
+      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      end_date: null,
+      updated_at: new Date().toISOString(),
+    };
 
     const { error } = await supabase
       .from('subscriptions')
-      .update({ status: 'canceled', updated_at: new Date().toISOString(), end_date: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('status', 'active')
+      .upsert(subscriptionData, { onConflict: 'user_id' });
 
     if (error) {
-      console.error('Error updating subscription status:', error)
-      return res.status(500).json({ error: 'Failed to update subscription status' })
+      console.error(`Erro ao ativar assinatura para o usuário ${userId}:`, error);
+    } else {
+      console.log(`✅ Assinatura ativada com sucesso para o usuário ${userId}.`);
     }
+  };
 
-    return res.json({ success: true })
-  } catch (err) {
-    console.error('Cancel subscription error:', err)
-    return res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
-// POST /api/plans/webhook  (importante: este endpoint precisa do corpo RAW, sem express.json antes)
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error('Stripe não configurado para webhooks')
-    return res.status(500).json({ error: 'Serviço de pagamento não configurado' })
-  }
-
-  const sig = req.headers['stripe-signature']
-  let event
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET)
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err)
-    return res.status(400).send(`Webhook Error: ${err.message || String(err)}`)
-  }
-
-  try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object
-        const userId = session?.metadata?.user_id
-        const planId = session?.metadata?.plan_id
-
-        if (!userId || !planId) {
-          console.error('Missing metadata in checkout session:', session?.id)
-          break
-        }
-
-        // Cancelar assinatura ativa anterior, se existir
-        const { data: existing } = await supabase
-          .from('subscriptions')
-          .select('stripe_subscription_id')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .single()
-
-        if (existing?.stripe_subscription_id && stripe) {
-          try { await stripe.subscriptions.cancel(existing.stripe_subscription_id) } catch (e) { console.error('Error canceling previous subscription:', e) }
-        }
-
-        const { error: upsertErr } = await supabase
-          .from('subscriptions')
-          .upsert({
-            user_id: userId,
-            plan_id: planId,
-            status: 'active',
-            stripe_subscription_id: session.subscription || null,
-            stripe_customer_id: session.customer || null,
-            start_date: new Date().toISOString(),
-            current_period_start: new Date().toISOString(),
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id' })
-
-        if (upsertErr) {
-          console.error('Error updating subscription:', upsertErr)
-          return res.status(500).json({ error: 'Database error' })
-        }
-
-        console.log(`[webhook] Subscription activated for user ${userId}, plan ${planId}`)
-        break
+  // Trata os eventos relevantes do Stripe
+  switch (event.type) {
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      const subscription = event.data.object as Stripe.Subscription;
+      if (subscription.status === 'active') {
+        await activateSubscription(subscription);
       }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object
-        const { error } = await supabase
-          .from('subscriptions')
-          .update({ status: 'canceled', end_date: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq('stripe_subscription_id', subscription.id)
-        if (error) console.error('Error updating subscription status after deletion:', error)
-        break
-      }
-
-      default:
-        console.log(`Unhandled event type ${event.type}`)
+      break;
     }
-
-    return res.json({ received: true })
-  } catch (err) {
-    console.error('Webhook handler error:', err)
-    return res.status(500).json({ error: 'Webhook internal error' })
+    case 'customer.subscription.deleted': {
+      const subscription = event.data.object as Stripe.Subscription;
+      await supabase
+        .from('subscriptions')
+        .update({ status: 'cancelled', end_date: new Date().toISOString() })
+        .eq('stripe_subscription_id', subscription.id);
+      console.log(`🔌 Assinatura ${subscription.id} cancelada.`);
+      break;
+    }
+    default:
+      console.log(`🔔 Evento Stripe não tratado: ${event.type}`);
   }
-})
 
-export default router
+  res.json({ received: true });
+});
+
+export default router;
