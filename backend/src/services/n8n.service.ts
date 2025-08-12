@@ -1,24 +1,29 @@
 import fetch from 'node-fetch';
 
-export async function sendToN8n(leadId: string, imageBuffer: Buffer, webhookUrl?: string, prompt = '') {
+/**
+ * Envia um payload genérico para um webhook do n8n.
+ * @param leadId O ID do lead para referência.
+ * @param payload O objeto de dados a ser enviado.
+ * @param webhookUrl A URL do webhook para este workflow específico.
+ */
+export async function sendToN8n(leadId: string, payload: object, webhookUrl?: string) {
   if (!webhookUrl) {
-    console.warn(`[n8n] Webhook URL não configurado para o workflow. Lead ${leadId} não será processado.`);
+    console.warn(`[n8n] Webhook URL não configurado. Lead ${leadId} não será processado.`);
     return;
   }
 
-  const payload = {
-    id: leadId,
-    prompt,
-    screenshot: imageBuffer.toString('base64'),
-    screenshot_type: 'png',
-    timestamp: new Date().toISOString()
+  // Adiciona metadados ao payload
+  const finalPayload = {
+    lead_id: leadId,
+    timestamp: new Date().toISOString(),
+    ...payload,
   };
 
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(finalPayload)
     });
 
     if (!response.ok) {
@@ -27,11 +32,7 @@ export async function sendToN8n(leadId: string, imageBuffer: Buffer, webhookUrl?
     }
 
     console.log(`[n8n] Lead ${leadId} enviado com sucesso para o webhook.`);
-    // O n8n agora é responsável por chamar de volta a nossa API
-    // para atualizar o lead com o comentário gerado.
-
   } catch (error) {
     console.error(`[n8n] Falha ao enviar lead ${leadId} para o webhook:`, error);
-    // Aqui você pode adicionar lógica para re-tentativas ou marcar o lead como falho
   }
 }

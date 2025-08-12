@@ -20,7 +20,8 @@ export interface MonitorGroupOptions {
 
 /**
  * Função async generator que monitora um grupo do Facebook
- * e retorna dados de cada post encontrado.
+ * e retorna dados de cada post encontrado. A nova lógica foca em abrir
+ * o permalink para extrair dados do modal.
  */
 export async function* monitorGroup(page: Page, options: MonitorGroupOptions) {
   const { groupUrl, workflowId, running } = options
@@ -29,38 +30,28 @@ export async function* monitorGroup(page: Page, options: MonitorGroupOptions) {
   let sameHeightCount = 0
 
   console.log(`[monitorGroup] Acessando grupo: ${groupUrl}`)
-
-  // Aumentar timeout e usar 'load' ao invés de 'networkidle'
   await page.goto(groupUrl, { waitUntil: 'load', timeout: 60000 })
-
-  // Aguardar um pouco para o feed carregar
-  await page.waitForTimeout(3000)
+  await page.waitForTimeout(5000) // Aguarda o carregamento inicial
 
   while (running.has(workflowId)) {
     const posts = await findAllPosts(page)
-    console.log(`[monitorGroup] Posts detectados: ${posts.length}`)
+    console.log(`[monitorGroup] Posts detectados no feed: ${posts.length}`)
 
     for (const post of posts) {
       if (!running.has(workflowId)) break
+      if (page.isClosed()) {
+        console.log('[monitorGroup] ⚠️ Página foi fechada.')
+        return
+      }
 
       try {
-        // Verificar se a página ainda está ativa antes de processar
-        if (page.isClosed()) {
-          console.log('[monitorGroup] ⚠️ Página foi fechada, pulando processamento do post')
-          continue
-        }
-
-        // Aguardar um pouco para o post carregar completamente
-        await page.waitForTimeout(1000)
-
         const meta = await extractMetaFromPost(post)
-        if (!meta) continue
+        if (!meta || !meta.url) continue
 
-        const { author, text, image, url } = meta
         const postMeta: PostMeta = {
-          url: url || groupUrl,
-          author: author || 'desconhecido',
-          text: text || '',
+          url: meta.url,
+          author: meta.author || 'desconhecido',
+          text: meta.text || '',
           timestamp: new Date().toISOString()
         }
         const contentHash = generatePostHash(postMeta)
@@ -68,63 +59,51 @@ export async function* monitorGroup(page: Page, options: MonitorGroupOptions) {
         if (processedHashes.has(contentHash)) continue
         processedHashes.add(contentHash)
 
-        // Captura da screenshot do post
+        // **Nova Lógica: Abrir post no modal para extração completa**
+        console.log(`[monitorGroup] Abrindo post em modal: ${meta.url}`)
+        await page.goto(meta.url, { waitUntil: 'domcontentloaded' })
+        
+        // **Aguardar o seletor do modal aparecer**
+        // Este seletor deve ser robusto para a visualização de permalink
+        await page.waitForSelector('div[role="dialog"]', { timeout: 15000 })
+        
+        // **Aqui entraria a nova função de extração do modal**
+        // Por exemplo: const modalData = await extractDataFromModal(page);
+        // Os dados extraídos (autor, texto, imagens, vídeos) seriam enviados ao n8n.
+        
+        // A lógica de screenshot e yield permanece para manter o fluxo atual,
+        // mas seria substituída pela extração do modal.
         const clip = await postClipBox(post, page)
-        if (!clip) {
-          console.log(`[monitorGroup] ⚠️ Não foi possível obter o clip do post. Pulando screenshot.`);
-          continue;
-        }
+        if (!clip) continue;
 
-        const screenshotPath = path.join(
-          screenshotsDir,
-          `${contentHash}.png`
-        )
+        const screenshotPath = path.join(screenshotsDir, `${contentHash}.png`)
         await fs.mkdir(path.dirname(screenshotPath), { recursive: true })
+        await page.screenshot({ path: screenshotPath, clip, timeout: 15000 });
 
-        try {
-          await page.screenshot({ path: screenshotPath, clip, timeout: 15000 }); // Timeout de 15 segundos para screenshot
-        } catch (screenshotError) {
-          console.error(`[monitorGroup] Erro ao tirar screenshot do post ${contentHash}:`, screenshotError.message);
-          // Se o erro for relacionado à área vazia, podemos tentar um fallback
-          if (screenshotError.message.includes('Clipped area is either empty or outside the resulting image')) {
-            console.log(`[monitorGroup] ⚠️ Erro de screenshot: Clipped area is either empty or outside the resulting image. Tentando screenshot da página inteira.`);
-            try {
-              await page.screenshot({ path: screenshotPath, fullPage: true, timeout: 15000 });
-            } catch (fallbackError) {
-              console.error(`[monitorGroup] Erro no fallback de screenshot:`, fallbackError.message);
-              continue; // Pula para o próximo post se o fallback falhar
-            }
-          } else {
-            continue; // Pula para o próximo post se for outro erro de screenshot
-          }
-        }
-
-        console.log(`[monitorGroup] Novo post encontrado: ${author} | Hash: ${contentHash}`)
+        console.log(`[monitorGroup] Novo post processado: ${postMeta.author} | Hash: ${contentHash}`)
 
         yield {
-          author: postMeta.author,
-          text: postMeta.text,
-          imageUrl: image,
+          ...postMeta,
+          imageUrl: meta.image,
           screenshotPath,
           contentHash,
-          url: postMeta.url
         }
+        
+        // Fechar o modal (ex: pressionando Escape ou clicando no botão de fechar)
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(1000); // Dar tempo para a UI atualizar
+
       } catch (error) {
         console.log('[monitorGroup] ⚠️ Erro processando post:', error.message)
-
-        // Se a página foi fechada, interromper o loop
-        if (error.message.includes('Target page, context or browser has been closed') ||
-            error.message.includes('page.isClosed')) {
-          console.log('[monitorGroup] 🛑 Página fechada, encerrando monitoramento')
-          break
+        if (page.isClosed() || error.message.includes('Target page, context or browser has been closed')) {
+          return
         }
-
-        // Para outros erros, apenas pular este post
-        continue
+        // Voltar para a página do grupo para continuar o scan
+        await page.goto(groupUrl, { waitUntil: 'load' });
       }
     }
 
-    // Rolagem infinita controlada
+    // Rolagem e controle de fim de feed
     const currentHeight = await page.evaluate(() => document.body.scrollHeight)
     if (currentHeight === lastHeight) {
       sameHeightCount++
@@ -137,145 +116,15 @@ export async function* monitorGroup(page: Page, options: MonitorGroupOptions) {
     }
     lastHeight = currentHeight
 
-    // Tentar rolar a página, com timeout
     try {
       await page.mouse.wheel(0, 800)
       await page.waitForTimeout(2000)
     } catch (scrollError) {
+      if (page.isClosed()) break;
       console.error('[monitorGroup] Erro ao rolar a página:', scrollError.message);
-      if (scrollError.message.includes('Target page, context or browser has been closed')) {
-        console.log('[monitorGroup] 🛑 Página fechada durante a rolagem, encerrando monitoramento')
-        break;
-      }
-      // Se houver erro ao rolar, tenta continuar com os posts existentes ou encerra se não houver mais posts
       continue;
     }
   }
 
   console.log(`[monitorGroup] ✅ Monitoramento finalizado para workflow ${workflowId}`)
-}
-
-// Mock functions for compilation, assuming they are defined elsewhere
-// In a real scenario, these would be imported from '../utils/facebook-post-selectors'
-async function extractPostText(page: Page, postElement: ElementHandle): Promise<string | null> {
-  // Placeholder implementation
-  return `Text from ${await postElement.evaluate(el => el.querySelector('h3')?.textContent || 'unknown author')}`;
-}
-
-async function extractAuthorName(page: Page, postElement: ElementHandle): Promise<string | null> {
-  // Placeholder implementation
-  return await postElement.evaluate(el => el.querySelector('h3 a')?.textContent || 'unknown');
-}
-
-async function extractPostUrl(page: Page, postElement: ElementHandle): Promise<string | null> {
-  // Placeholder implementation
-  const linkElement = await postElement.querySelector('h3 a');
-  return linkElement ? await linkElement.evaluate(node => (node as HTMLAnchorElement).href) : null;
-}
-
-// Placeholder for EXCLUDE_SELECTOR and ACTIONS_SELECTOR if they are not defined globally
-const EXCLUDE_SELECTOR = 'div[data-ad-comet-preview="message"]';
-const ACTIONS_SELECTOR = 'div[role="button"][aria-label="Ações"]';
-
-// Mock function for takePostScreenshot if it's not defined in the provided snippet
-async function takePostScreenshot(page: Page, postElement: ElementHandle): Promise<string> {
-  const filename = `post_${Date.now()}.png`;
-  const fullPath = path.join(screenshotsDir, filename);
-
-  try {
-    // Verificar se o elemento está visível e tem dimensões
-    const boundingBox = await postElement.boundingBox();
-
-    if (!boundingBox || boundingBox.width <= 0 || boundingBox.height <= 0) {
-      console.log('[screenshot] ⚠️ Elemento não tem dimensões válidas, usando screenshot da página');
-      await page.screenshot({ path: fullPath, fullPage: false });
-      return fullPath;
-    }
-
-    // Garantir que o elemento esteja na viewport
-    await postElement.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500); // Aguardar renderização
-
-    // Tentar screenshot do elemento específico
-    await postElement.screenshot({
-      path: fullPath,
-      timeout: 10000 // 10 segundos de timeout
-    });
-
-    return fullPath;
-  } catch (error) {
-    console.log('[screenshot] ⚠️ Erro no screenshot do elemento, tentando screenshot da área visível:', error.message);
-
-    try {
-      // Fallback: screenshot da viewport atual
-      await page.screenshot({
-        path: fullPath,
-        fullPage: false,
-        clip: { x: 0, y: 0, width: 1200, height: 800 }
-      });
-      return fullPath;
-    } catch (fallbackError) {
-      console.log('[screenshot] ❌ Erro no fallback do screenshot:', fallbackError.message);
-      throw fallbackError;
-    }
-  }
-}
-
-// Mock function for findAllPosts if it's not defined in the provided snippet
-async function findAllPosts(page: Page): Promise<any[]> {
-  const POST_CONTAINERS = [
-    // Seletores mais específicos primeiro (com aria-posinset)
-    '[role="feed"] > div [role="article"][aria-posinset]',
-    '[role="feed"] [role="article"][aria-posinset]',
-
-    // Seletor principal com exclusões
-    `[role="feed"] [role="article"]:not(:has(${EXCLUDE_SELECTOR}))`,
-
-    // Seletores alternativos
-    `[role="feed"] div:has(h3 a[aria-label][role="link"]):not(:has(${EXCLUDE_SELECTOR}))`,
-    `[role="feed"] div:has([data-ad-preview*="message"]):not(:has(${EXCLUDE_SELECTOR}))`,
-    `[role="feed"] div:has([data-ad-comet-preview]):not(:has(${EXCLUDE_SELECTOR}))`,
-  ]
-
-  for (const selector of POST_CONTAINERS) {
-    try {
-      const count = await page.locator(selector).count()
-      console.log(`[findAllPosts] Seletor "${selector}" encontrou ${count} posts`)
-
-      if (count > 0) {
-        const posts: ElementHandle[] = []
-
-        // Limitar a 5 posts para evitar timeout
-        const maxPosts = Math.min(count, 5)
-
-        // Coletar posts como Locators para usar a API moderna do Playwright
-        for (let i = 0; i < maxPosts; i++) {
-          try {
-            const postLocator = page.locator(selector).nth(i)
-            const isVisible = await postLocator.isVisible({ timeout: 3000 })
-            if (isVisible) {
-              posts.push(postLocator)
-              console.log(`[findAllPosts] ✅ Post ${i} coletado com sucesso`)
-            }
-          } catch (error) {
-            console.log(`[findAllPosts] ⚠️ Erro ao coletar post ${i}:`, error.message)
-            continue
-          }
-        }
-
-        if (posts.length > 0) {
-          console.log(`[findAllPosts] 🎯 Retornando ${posts.length} posts para processamento`)
-          return posts
-        }
-      }
-    } catch (error) {
-      if (error.message.includes('Target page, context or browser has been closed')) {
-        console.log('[findAllPosts] 🛑 Browser fechado durante busca')
-        return []
-      }
-      console.log(`[findAllPosts] Erro no seletor "${selector}":`, error.message)
-    }
-  }
-
-  return []
 }

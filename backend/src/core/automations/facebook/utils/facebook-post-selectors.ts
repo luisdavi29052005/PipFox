@@ -123,6 +123,76 @@ export const findAllPosts = async (page: any) => {
   return loc
 }
 
+
+// Container principal do post dentro do modal
+export const MODAL_POST_CONTAINER = 'div[role="dialog"] [role="article"]';
+
+// Seletor para o autor dentro do modal
+export const MODAL_AUTHOR = [
+  'div[role="dialog"] h2 a[aria-label][role="link"]',
+  'div[role="dialog"] a[aria-label][role="link"][href*="/user/"]',
+  'div[role="dialog"] a[aria-label][role="link"][href*="/profile.php"]'
+].join(', ');
+
+// Seletor para o texto do post dentro do modal
+export const MODAL_TEXT = [
+  'div[role="dialog"] [data-ad-preview*="message"]',
+  'div[role="dialog"] div[dir="auto"]:not(:has(*))'
+].join(', ');
+
+// Seletor para imagens dentro do modal
+export const MODAL_IMAGES = 'div[role="dialog"] a[href*="/photo"] img, div[role="dialog"] img[data-visualcompletion="media-vc-image"]';
+
+// Seletor para vídeos dentro do modal
+export const MODAL_VIDEOS = 'div[role="dialog"] video';
+
+// Seletor para o botão de fechar o modal
+export const MODAL_CLOSE_BUTTON = 'div[role="dialog"] div[aria-label="Fechar"], div[role="dialog"] div[aria-label="Close"]';
+
+
+/**
+ * Extrai metadados de um post aberto em um modal/permalink.
+ * Esta função é o ponto de entrada para a nova lógica de extração.
+ * @param page A página do Playwright com o modal do post aberto.
+ */
+export async function extractDataFromPostModal(page: any) {
+  const postContainer = page.locator(MODAL_POST_CONTAINER).first();
+
+  if ((await postContainer.count()) === 0) {
+    console.warn('[extractDataFromPostModal] Container do post no modal não encontrado.');
+    return null;
+  }
+
+  // Extrai autor
+  const authorEl = await pickFirst(postContainer, [MODAL_AUTHOR]);
+  const author = authorEl ? ((await authorEl.textContent()) || (await authorEl.getAttribute('aria-label')))?.trim() : undefined;
+
+  // Extrai texto
+  let text = '';
+  const textBlocks = postContainer.locator(MODAL_TEXT);
+  for (let i = 0; i < await textBlocks.count(); i++) {
+    const t = (await textBlocks.nth(i).innerText()).trim();
+    if (t) text += (text ? '\n\n' : '') + t;
+  }
+
+  // Extrai imagens
+  const imageUrls = await postContainer.locator(MODAL_IMAGES).evaluateAll((imgs: HTMLImageElement[]) => 
+    imgs.map(img => img.src).filter(src => !src.includes('emoji') && !src.includes('static'))
+  );
+  
+  // Extrai vídeos
+  const videoUrls = await postContainer.locator(MODAL_VIDEOS).evaluateAll((videos: HTMLVideoElement[]) => 
+    videos.map(video => video.src)
+  );
+
+  return {
+    author,
+    text,
+    imageUrls,
+    videoUrls,
+  };
+}
+
 export async function extractMetaFromPost(el: any) {
   // author
   const authorEl = await pickFirst(el, AUTHOR)

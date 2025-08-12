@@ -31,79 +31,49 @@ export async function postComment(input: PostCommentInput): Promise<PostCommentR
     }
 
     if (postUrl) {
-      await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
+      // Se a URL for fornecida, garante que a página está nela.
+      if (page.url() !== postUrl) {
+        await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
+      }
       await page.waitForLoadState('networkidle', { timeout: timeoutMs })
     }
 
-    const scope = post ?? page
+    // O escopo agora é a página inteira, pois estamos na visão de modal
+    const scope = page
 
-    // 1) Tenta focar o post (quando houver ElementHandle)
-    if (post) {
-      try { await post.scrollIntoViewIfNeeded() } catch {}
-      try { await post.click({ timeout: 2_000 }) } catch {}
-    }
-
-    // 2) Abre a caixa de comentário se houver um botão explícito
-    const openButtons = [
-      '[aria-label*="Comentar"]',
-      '[aria-label*="Comment"]',
-      'div[role="button"][aria-label*="Comment"]',
-      'div[role="button"][aria-label*="Comentar"]'
-    ]
-    for (const sel of openButtons) {
-      const btn = scope.locator(sel).first()
-      if (await btn.isVisible().catch(() => false)) {
-        try { await btn.click({ timeout: 2_000 }) } catch {}
-        break
-      }
-    }
-
-    // 3) Localiza a área editável do comentário dentro do post (prioridade)
+    // Localiza a área de comentário no contexto do modal/permalink
     const editors = [
-      '[contenteditable="true"][role="textbox"]',
-      'div[aria-label*="Escreva um comentário"]',
-      'div[aria-label*="Write a comment"]',
-      'div[aria-label*="Comentar"]'
+      'div[role="dialog"] div[aria-label*="Escreva um comentário"]',
+      'div[role="dialog"] div[aria-label*="Write a comment"]',
+      'div[role="dialog"] [contenteditable="true"][role="textbox"]',
+      'div[aria-label*="Escreva um comentário"]', // Fallback geral
     ]
 
     let editorFound = null as null | ReturnType<typeof scope.locator>
     for (const sel of editors) {
       const ed = scope.locator(sel).first()
-      if (await ed.isVisible().catch(() => false)) {
+      if (await ed.isVisible({ timeout: 3000 }).catch(() => false)) {
         editorFound = ed
         break
       }
     }
 
-    // Fallback global (fora do post) — menos seguro, mas útil em páginas do post
     if (!editorFound) {
-      for (const sel of editors) {
-        const ed = page.locator(sel).first()
-        if (await ed.isVisible().catch(() => false)) {
-          editorFound = ed
-          break
-        }
-      }
-    }
-
-    if (!editorFound) {
-      return { ok: false, error: 'Editor de comentário não encontrado' }
+      return { ok: false, error: 'Editor de comentário não encontrado na visualização do post' }
     }
 
     await editorFound.click({ timeout: 4_000 })
-
-    // Digita (contenteditable não usa fill)
-    await page.keyboard.type(message, { delay: 15 })
-
-    // Envia o comentário (Enter)
+    await page.keyboard.type(message, { delay: 25 }) // Aumentar delay para simular digitação
     await page.keyboard.press('Enter')
 
-    // Confirma visivelmente que o comentário apareceu (melhor esforço)
+    // Confirmação
     try {
-      await page.waitForTimeout(800)
-      const maybeSelfComment = post ? post.locator(`:text("${message.slice(0, 20)}")`) : page.locator(`:text("${message.slice(0, 20)}")`)
-      await maybeSelfComment.first().waitFor({ state: 'visible', timeout: 4_000 })
-    } catch {}
+      await page.waitForTimeout(1500)
+      const textSelector = `:text("${message.substring(0, 30)}")`
+      await page.locator(textSelector).first().waitFor({ state: 'visible', timeout: 5000 })
+    } catch (e) {
+      console.warn('[postComment] Não foi possível confirmar a postagem do comentário visualmente.')
+    }
 
     return { ok: true }
   } catch (err: any) {

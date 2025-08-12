@@ -3,18 +3,13 @@ import { postComment, type PostCommentInput, type PostCommentResult } from './po
 
 export type { PostCommentInput, PostCommentResult }
 
-/**
- * Router de ações do Facebook. Mantém a interface estável
- * e delega a implementação para módulos especializados.
- */
 export const actions = {
-  /**
-   * Public API para comentar em um post.
-   * Aceita tanto o ElementHandle do post quanto a URL do post.
-   */
-  async postComment(page: Page, postUrl: string, message: string): Promise<PostCommentResult> {
-    return postComment({ page, postUrl, message })
+  // Agora aceita URL do post ou o próprio ElementHandle do post
+  async postComment(page: Page, target: string | ElementHandle<Element>, message: string): Promise<PostCommentResult> {
+    if (typeof target === 'string') {
+      return postComment({ page, postUrl: target, message })
+    }
+    return postComment({ page, post: target, message })
   }
 }
-
 export type FacebookActions = typeof actions

@@ -5,6 +5,8 @@ import { supabase } from '../../../services/supabaseClient'
 import { openContextForAccount } from './session/context'
 import { monitorGroup } from './actions/monitorGroups'
 import { actions } from './actions/actions'
+// Importa a nova função de extração
+import { extractDataFromPostModal } from './utils/facebook-post-selectors' 
 
 /**
  * Config da orquestração
@@ -21,15 +23,15 @@ export interface RunnerInput {
 // Controle de workflows em execução
 const running = new Map<string, boolean>()
 
-const sendToN8n = async (data: any) => {
-  const n8nUrl = process.env.N8N_WEBHOOK_URL
-  if (!n8nUrl) {
-    console.log('[runner] ⚠️ N8N_WEBHOOK_URL não configurada, pulando envio')
+// Atualiza a função sendToN8n para aceitar mais dados
+const sendToN8n = async (webhookUrl: string, data: any) => {
+  if (!webhookUrl) {
+    console.log('[runner] ⚠️ Webhook URL não configurada, pulando envio')
     return
   }
 
   try {
-    const response = await fetch(n8nUrl, {
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -60,61 +62,58 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
   const page = await context.newPage()
 
   for (const groupUrl of groups) {
-    if (!running.has(workflowId)) {
-      console.log(`[runner] ⏹️ Workflow ${workflowId} parado. Interrompendo monitoramento do grupo: ${groupUrl}`)
-      break
-    }
-
-    // Verificar se o contexto ainda está ativo
-    if (context.browser() && context.browser().isConnected()) {
-      console.log(`[runner] ▶️ Monitorando grupo: ${groupUrl}`)
-    } else {
+    if (!running.has(workflowId)) break
+    if (!context.browser()?.isConnected()) {
       console.log(`[runner] ❌ Contexto do browser foi desconectado, encerrando workflow`)
       break
     }
+    
+    console.log(`[runner] ▶️ Monitorando grupo: ${groupUrl}`)
 
-    // Passa 'workflowId' e 'running' para dentro do monitor
     try {
       for await (const post of monitorGroup(page, { groupUrl, workflowId, running })) {
-      if (!running.has(workflowId)) break
+        if (!running.has(workflowId)) break
 
-      console.log(`[runner] 📌 Novo post ${post.contentHash} de ${post.author ?? 'desconhecido'}`)
+        console.log(`[runner] 📌 Post ${post.contentHash} de ${post.author ?? 'desconhecido'} encontrado. Abrindo para extração...`)
 
-      let reply: string | undefined
-      if (n8nWebhookUrl) {
-        await sendToN8n({
-          kind: 'facebook_post',
-          groupUrl,
-          author: post.author,
-          text: post.text,
-          screenshotPath: post.screenshotPath,
-          url: post.url,
-          contentHash: post.contentHash
-        })
-      }
+        // **Nova Lógica de Extração e Envio**
+        // A navegação para o modal agora ocorre dentro do monitorGroup
 
-      if (reply) {
-        const result = await actions.postComment(page, post.url, reply)
-        console.log(result.ok ? `[runner] 💬 Comentário publicado` : `[runner] ⚠️ Falha ao comentar: ${result.error}`)
-      }
+        // 1. Chamar a extração de dados do modal
+        const modalData = await extractDataFromPostModal(page);
+        
+        if (modalData) {
+            console.log(`[runner] Dados extraídos do modal:`, modalData);
+            
+            // 2. Enviar dados estruturados para o n8n
+            if (n8nWebhookUrl) {
+                await sendToN8n(n8nWebhookUrl, {
+                    kind: 'facebook_post_details',
+                    ...modalData,
+                    postUrl: post.url,
+                    groupUrl: groupUrl,
+                    contentHash: post.contentHash
+                });
+            }
+
+            // O sistema agora aguardará o callback do n8n que irá
+            // enfileirar um 'comment-job' processado pelo worker.ts
+        }
+        
+        // Lógica antiga de comentário direto foi removida,
+        // pois agora depende do webhook.
       }
     } catch (monitorError) {
       console.error(`[runner] ❌ Erro no monitoramento do grupo ${groupUrl}:`, monitorError.message)
-      
-      // Se o browser foi fechado, encerrar completamente
       if (monitorError.message.includes('Target page, context or browser has been closed')) {
-        console.log(`[runner] 🛑 Browser fechado, encerrando workflow ${workflowId}`)
         break
       }
-      
-      // Para outros erros, tentar próximo grupo após delay
-      console.log(`[runner] ⏭️ Tentando próximo grupo em 5 segundos...`)
       await new Promise(resolve => setTimeout(resolve, 5000))
     }
   }
 
   await context.close()
-  running.delete(workflowId) // Limpa o estado ao finalizar
+  running.delete(workflowId)
   console.log(`[runner] ✅ Finalizado workflow ${workflowId}`)
 }
 
