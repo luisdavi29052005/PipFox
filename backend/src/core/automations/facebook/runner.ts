@@ -74,30 +74,32 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
       for await (const post of monitorGroup(page, { groupUrl, workflowId, running })) {
         if (!running.has(workflowId)) break
 
-        console.log(`[runner] 📌 Post ${post.contentHash} de ${post.author ?? 'desconhecido'} encontrado. Abrindo para extração...`)
+        console.log(`[runner] 📌 Post ${post.contentHash} de ${post.author ?? 'desconhecido'} encontrado.`)
 
-        // **Nova Lógica de Extração e Envio**
-        // A navegação para o modal agora ocorre dentro do monitorGroup
-
-        // 1. Chamar a extração de dados do modal
-        const modalData = await extractDataFromPostModal(page);
-        
-        if (modalData) {
-            console.log(`[runner] Dados extraídos do modal:`, modalData);
-            
-            // 2. Enviar dados estruturados para o n8n
-            if (n8nWebhookUrl) {
-                await sendToN8n(n8nWebhookUrl, {
-                    kind: 'facebook_post_details',
-                    ...modalData,
-                    postUrl: post.url,
-                    groupUrl: groupUrl,
-                    contentHash: post.contentHash
-                });
-            }
-
-            // O sistema agora aguardará o callback do n8n que irá
-            // enfileirar um 'comment-job' processado pelo worker.ts
+        // Enviar dados estruturados para o n8n
+        if (n8nWebhookUrl) {
+          const payload = {
+            kind: 'facebook_post_analysis',
+            post: {
+              url: post.url,
+              author: post.author,
+              text: post.text,
+              images: post.images || [],
+              timestamp: post.timestamp,
+              contentHash: post.contentHash,
+              extractedFromModal: post.extractedFromModal
+            },
+            groupUrl: groupUrl,
+            workflowId: workflowId
+          }
+          
+          console.log(`[runner] Enviando dados para n8n:`, {
+            author: payload.post.author,
+            textLength: payload.post.text.length,
+            imagesCount: payload.post.images.length
+          })
+          
+          await sendToN8n(n8nWebhookUrl, payload)
         }
         
         // Lógica antiga de comentário direto foi removida,

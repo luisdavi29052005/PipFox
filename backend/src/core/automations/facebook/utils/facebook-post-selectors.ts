@@ -1,281 +1,295 @@
-// backend/src/core/automations/facebook/utils/facebook-post-selectors.ts
-// Seletores & debug para extrair APENAS posts principais (Comet 2025)
+import { Page, ElementHandle } from 'playwright'
 
-import fs from "fs";
-import path from "path";
-
-// backend/src/core/automations/facebook/utils/facebook-post-selectors.ts
-// Pacote de seletores + utilitários para detectar posts (e NÃO comentários) no feed/grupos do Facebook (Comet 2025)
-// Uso: import { findAllPosts, extractMetaFromPost, postClipBox } from '../utils/facebook-post-selectors'
-
+// Feed raiz
 export const FEED = '[role="feed"]'
 
-// Blocos a EXCLUIR (comentários, reels, etc.)
-export const EXCLUDE = ['[aria-label*="Comment"]',
-  '[aria-label*="Comentários"]',
-  '[aria-label*="Comments"]',
-  '[aria-label*="Responder"]',
-  '[aria-label*="Write a comment"]',
-  '[aria-label*="Escreva um comentário"]',
-  '[data-visualcompletion="ignore-dynamic"] [role="article"]', // popups/modais
-  '[data-pagelet*="Stories"]',
-  '[aria-label*="Stories"]',
-  '[aria-label*="Reels"]',
-  'div[role="dialog"] *',  '[aria-label*="Comentário"]',
-  '[aria-label*="Comentar"]',
-  '[placeholder*="Escreva um comentário"]',
+// Exclusões mínimas e estáveis
+export const EXCLUDE = [
+  'div[role="dialog"] [role="article"]',
+  '[data-pagelet*="Stories"] [role="article"]',
+  '[aria-label*="Stories" i] [role="article"]',
+  '[aria-label*="Reels" i] [role="article"]'
 ].join(', ')
 
-// Delimitadores do post (rodapé/ações)
+// Heurística de ações típicas de post
 export const ACTIONS = [
   '[role="toolbar"]',
-  '[aria-label*="Actions for this post"]',
-  '[aria-label*="Ações da publicação"]',
-  'div[role="group"]:has(button[aria-label*="Like"], button[aria-label*="Curtir"])',
-  'div:has(> div[role="button"]:has-text("Like"))',
-  'div:has(> div[role="button"]:has-text("Curtir"))',
-].join(', ')
-
-// Início do bloco de comentários / caixa "Escreva um comentário"
-export const COMMENT_START = [
-  '[aria-label*="Write a comment"]',
-  '[aria-label*="Escreva um comentário"]',
-  '[placeholder*="Write a comment"]',
-  '[placeholder*="Escreva um comentário"]',
-  '[role="textbox"][aria-label*="Comment"]',
-  '[role="textbox"][aria-label*="Comentar"]',
-  // alguns layouts colocam a caixa de comentário dentro de um container com label genérico
-  'div:has(> [role="textbox"][aria-label*="Write a comment"])',
-  'div:has(> [role="textbox"][aria-label*="Escreva um comentário"])'
-].join(', ')
-
-
-// Candidatos de container do POST.
-export const POST_CONTAINERS: string[] = [
-  `${FEED} > div ${'[role="article"]'}[aria-posinset]`,
-  `${FEED} ${'[role="article"]'}[aria-posinset]`,
-  `${FEED} :is(div,section,article) ${'[role="article"]'}:has(h3)`,
-  `${FEED} :is(div,section,article)[aria-posinset] :is([role="article"], article)`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/groups/"])`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/user/"])`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/people/"])`,
-  `${FEED} ${'[role="article"]'}:has(h3 a[role="link"][href*="/profile.php"])`,
-  `${FEED} ${'[role="article"]'}:has([aria-label][role="link"])`,
-  `${FEED} ${'[role="article"]'}:has([aria-posinset])`,
-  `${FEED} ${'[role="article"]'}:not(:has(${EXCLUDE}))`,
+  '[aria-label*="Ações" i]',
+  '[aria-label*="Actions" i]',
+  'div[role="group"] button[aria-label*="Curtir" i], div[role="group"] button[aria-label*="Like" i]'
 ]
 
-// Seletores de AUTOR
-export const AUTHOR: string[] = [
-  'h3 a[aria-label][role="link"]',
-  'a[aria-label][role="link"]',
-  'h3 [role="link"]',
-  '[role="link"][tabindex]:not([tabindex="-1"])',
-  'a[role="link"][href*="/user/"]',
-  'a[role="link"][href*="/people/"]',
-  'a[role="link"][href*="/profile.php"]',
-  'h3 b > span',
-  'h3 strong > span',
-]
+// Localiza artigos "post principal" de forma permissiva e resiliente
+export async function findAllPosts(page: Page): Promise<ElementHandle[]> {
+  try {
+    await page.waitForSelector(FEED, { timeout: 10000 })
 
-// Seletores de TEXTO do post (preferir containers Comet de mensagem)
-export const TEXT: string[] = [
-  '[data-ad-preview*="message"]',
-  '[data-ad-comet-preview]',
-  'div[dir] :is(div, span):not(:has(a,img,video,svg,button))',
-  'div[lang] :is(div, span):not(:has(a,img,video,svg,button))',
-]
+    const idxList = await page.evaluate(() => {
+      const feed = document.querySelector('[role="feed"]')
+      if (!feed) return [] as number[]
+      const all = Array.from(feed.querySelectorAll('[role="article"]'))
 
-// Seletores de IMAGEM principal (excluir ícones/emoji)
-export const IMAGES: string[] = [
-  'img[src*="fbcdn"], img[src*="scontent"], img[src*="safe_image"]',
-  'a[href*="photo"] img',
-  'a[role="link"] img',
-  '[style*="background-image"]',
-]
+      const looksLikePost = (article: Element) => {
+        // 1 ponto forte: atributo pointset no Comet
+        if ((article as HTMLElement).hasAttribute('pointset')) return true
 
-// Seletores de PERMALINK do post
-export const PERMALINK: string[] = [
-  'a[href*="/posts/"]',
-  'a[href*="/permalink/"]',
-  'a[aria-label] abbr',
-]
+        // 2 ações típicas
+        const actions = [
+          '[role="toolbar"]',
+          '[aria-label*="Ações" i]',
+          '[aria-label*="Actions" i]',
+          'div[role="group"] button[aria-label*="Curtir" i], div[role="group"] button[aria-label*="Like" i]'
+        ]
+        const hasActions = actions.some(sel => article.querySelector(sel))
 
-// Utilitários ---------------------------------------------------------------
-export const pickFirst = async (root: any, selectors: string[]) => {
-  for (const sel of selectors) {
-    const loc = root.locator(sel)
-    const count = await loc.count().catch(() => 0)
-    if (count) {
-      const el = await loc.first().elementHandle().catch(() => null)
-      if (el) return el
-    }
-  }
-  return null
-}
+        // 3 timestamp clicável
+        const hasTime = !!article.querySelector('a[role="link"] abbr[title], a[role="link"] time[title]')
 
-export const findAllPosts = async (page: any) => {
-  let loc = page.locator(POST_CONTAINERS.join(', '))
-  // Filtro de visibilidade & exclusões
-  loc = loc.filter({ hasNot: page.locator(EXCLUDE) })
-  // Exigir barra de ações para ancorar o fim do post
-  loc = loc.filter({ has: page.locator(ACTIONS) })
-  return loc
-}
+        // 4 algum texto visível razoável
+        const textEl =
+          article.querySelector('[data-ad-preview="message"]') ||
+          article.querySelector('[data-testid="post_message"]') ||
+          article.querySelector('div[dir="auto"]')
+        const hasText = !!(textEl && (textEl.textContent || '').trim().length > 5)
 
+        // 5 não estar em modal ou stories/reels
+        if (article.closest('div[role="dialog"], [data-pagelet*="Stories"], [aria-label*="Stories" i], [aria-label*="Reels" i]')) {
+          return false
+        }
 
-// Container principal do post dentro do modal
-export const MODAL_POST_CONTAINER = 'div[role="dialog"] [role="article"]';
+        // 6 não parecer comentário
+        const label = (article.getAttribute('aria-label') || '').toLowerCase()
+        if (label.startsWith('comentário de ') || label.startsWith('comment by ')) return false
+        if (article.querySelector('a[href*="comment_id="]')) return false
+        if (!hasActions && article.querySelector('[placeholder*="coment" i], [aria-label*="coment" i]')) return false
 
-// Seletor para o autor dentro do modal
-export const MODAL_AUTHOR = [
-  'div[role="dialog"] h2 a[aria-label][role="link"]',
-  'div[role="dialog"] a[aria-label][role="link"][href*="/user/"]',
-  'div[role="dialog"] a[aria-label][role="link"][href*="/profile.php"]'
-].join(', ');
-
-// Seletor para o texto do post dentro do modal
-export const MODAL_TEXT = [
-  'div[role="dialog"] [data-ad-preview*="message"]',
-  'div[role="dialog"] div[dir="auto"]:not(:has(*))'
-].join(', ');
-
-// Seletor para imagens dentro do modal
-export const MODAL_IMAGES = 'div[role="dialog"] a[href*="/photo"] img, div[role="dialog"] img[data-visualcompletion="media-vc-image"]';
-
-// Seletor para vídeos dentro do modal
-export const MODAL_VIDEOS = 'div[role="dialog"] video';
-
-// Seletor para o botão de fechar o modal
-export const MODAL_CLOSE_BUTTON = 'div[role="dialog"] div[aria-label="Fechar"], div[role="dialog"] div[aria-label="Close"]';
-
-
-/**
- * Extrai metadados de um post aberto em um modal/permalink.
- * Esta função é o ponto de entrada para a nova lógica de extração.
- * @param page A página do Playwright com o modal do post aberto.
- */
-export async function extractDataFromPostModal(page: any) {
-  const postContainer = page.locator(MODAL_POST_CONTAINER).first();
-
-  if ((await postContainer.count()) === 0) {
-    console.warn('[extractDataFromPostModal] Container do post no modal não encontrado.');
-    return null;
-  }
-
-  // Extrai autor
-  const authorEl = await pickFirst(postContainer, [MODAL_AUTHOR]);
-  const author = authorEl ? ((await authorEl.textContent()) || (await authorEl.getAttribute('aria-label')))?.trim() : undefined;
-
-  // Extrai texto
-  let text = '';
-  const textBlocks = postContainer.locator(MODAL_TEXT);
-  for (let i = 0; i < await textBlocks.count(); i++) {
-    const t = (await textBlocks.nth(i).innerText()).trim();
-    if (t) text += (text ? '\n\n' : '') + t;
-  }
-
-  // Extrai imagens
-  const imageUrls = await postContainer.locator(MODAL_IMAGES).evaluateAll((imgs: HTMLImageElement[]) => 
-    imgs.map(img => img.src).filter(src => !src.includes('emoji') && !src.includes('static'))
-  );
-  
-  // Extrai vídeos
-  const videoUrls = await postContainer.locator(MODAL_VIDEOS).evaluateAll((videos: HTMLVideoElement[]) => 
-    videos.map(video => video.src)
-  );
-
-  return {
-    author,
-    text,
-    imageUrls,
-    videoUrls,
-  };
-}
-
-export async function extractMetaFromPost(el: any) {
-  // author
-  const authorEl = await pickFirst(el, AUTHOR)
-  let author: string | undefined
-  if (authorEl) {
-    const txt = (await authorEl.textContent()) || ''
-    const aria = (await authorEl.getAttribute('aria-label')) || ''
-    author = (txt || aria).trim() || undefined
-  }
-
-  // texto
-  let text = ''
-  for (const sel of TEXT) {
-    const blocks = el.locator(sel)
-    const count = await blocks.count().catch(() => 0)
-    if (count) {
-      for (let i = 0; i < Math.min(count, 4); i++) {
-        const t = (await blocks.nth(i).innerText().catch(() => '')).trim()
-        if (t && t.length > 20) text += (text ? '\n\n' : '') + t
+        // Estratégia permissiva: precisa de 2 entre ações, tempo e texto
+        const score = [hasActions, hasTime, hasText].filter(Boolean).length
+        return score >= 2
       }
-      if (text) break
-    }
-  }
-  const textPreview = text || undefined
 
-  // imagem
-  let imageUrl: string | undefined
-  for (const sel of IMAGES) {
-    const imgs = el.locator(sel)
-    const n = await imgs.count().catch(() => 0)
-    for (let i = 0; i < n; i++) {
-      const handle = await imgs.nth(i).elementHandle().catch(() => null)
-      if (!handle) continue
-      const tag = await handle.evaluate((node: any) => node.tagName.toLowerCase())
-      let src: string | null = null
-      if (tag === 'img') src = await handle.getAttribute('src')
-      else src = await handle.evaluate((node: HTMLElement) => getComputedStyle(node).backgroundImage.replace(/^url\(["']?|["']?\)$/g, ''))
-      if (!src) continue
-      const low = src.toLowerCase()
-      if (low.includes('emoji') || low.includes('static') || low.includes('sprited')) continue
-      imageUrl = src
-      break
-    }
-    if (imageUrl) break
-  }
+      const result: number[] = []
+      for (let i = 0; i < all.length; i++) {
+        const a = all[i] as any
+        if (a.__fbop_seen) continue
+        if (looksLikePost(a)) {
+          a.__fbop_seen = true
+          result.push(i)
+        }
+      }
+      return result
+    })
 
-  // permalink
-  let url: string | undefined
-  for (const sel of PERMALINK) {
-    const a = el.locator(sel)
-    const count = await a.count().catch(() => 0)
-    if (count) {
-      const href = await a.first().getAttribute('href')
-      if (href) { url = href; break }
+    const handles: ElementHandle[] = []
+    for (const idx of idxList as number[]) {
+      const h = await page.evaluateHandle((i) => {
+        const feed = document.querySelector('[role="feed"]')
+        if (!feed) return null
+        const all = Array.from(feed.querySelectorAll('[role="article"]'))
+        return all[i] || null
+      }, idx)
+      if (h && h.asElement()) handles.push(h.asElement() as ElementHandle)
     }
-  }
 
-  return { author, text: textPreview, image: imageUrl, url }
+    return handles
+  } catch (e: any) {
+    console.error('[findAllPosts] erro:', e.message)
+    return []
+  }
 }
 
-// Heurística para screenshot: do topo do artigo até as ações
-export async function postClipBox(el: any, page: any) {
-  const postBox = await el.boundingBox()
-  if (!postBox) return null
+// Extrai metadados essenciais do próprio card no feed
+export async function extractMetaFromPost(post: ElementHandle): Promise<{ url?: string, author?: string, text?: string, image?: string } | null> {
+  try {
+    const meta = await post.evaluate((el) => {
+      const pickPermalink = (): string => {
+        const link = el.querySelector('a[href*="/permalink/"], a[href*="/posts/"]') as HTMLAnchorElement | null
+        if (link) return link.href
+        const any = Array.from(el.querySelectorAll('a[href]')) as HTMLAnchorElement[]
+        for (const a of any) {
+          const href = a.href
+          const m1 = href.match(/\/(?:posts|permalink)\/(\d+)/)
+          const m2 = href.match(/[?&](?:story_fbid|fbid)=(\d+)/)
+          const id = m1?.[1] || m2?.[1]
+          if (id) {
+            const parts = location.pathname.split('/').filter(Boolean)
+            const groupSlug = parts[1] || ''
+            if (groupSlug) return `${location.origin}/groups/${groupSlug}/permalink/${id}/`
+          }
+        }
+        return ''
+      }
 
-  // encontramos as 'ações' do post (Curtir/Comentar/Compartilhar) e/ou o início dos comentários
-  const actions = await pickFirst(el, [ACTIONS])
-  const commentStart = await pickFirst(el, [COMMENT_START])
+      const authorEl =
+        el.querySelector('[data-testid="story-subtitle"] a[role="link"]') ||
+        el.querySelector('h3 a[role="link"], h4 a[role="link"]') ||
+        el.querySelector('a[role="link"] strong')
+      const author = authorEl?.textContent?.trim() || null
 
-  // limite inferior inicial: fundo do artigo
-  let bottom = postBox.y + postBox.height
+      const textCands = [
+        el.querySelector('[data-ad-preview="message"]'),
+        el.querySelector('[data-testid="post_message"]'),
+        el.querySelector('[data-testid="story-subtitle"] + div'),
+        el.querySelector('div[dir="auto"]')
+      ].filter(Boolean) as Element[]
+      let text = ''
+      for (const t of textCands) {
+        const s = (t.textContent || '').trim()
+        if (s.length > text.length) text = s
+      }
+      if (text.length < 5) text = ''
 
-  if (actions) {
-    const ab = await actions.boundingBox()
-    if (ab) bottom = Math.min(bottom, ab.y + ab.height)
+      const imgEl = el.querySelector('img[src*="scontent"], img[src*="fbcdn"]') as HTMLImageElement | null
+      let url = pickPermalink()
+      if (url) {
+        try {
+          const u = new URL(url)
+          u.searchParams.delete('__cft__')
+          u.searchParams.delete('__tn__')
+          u.searchParams.delete('comment_id')
+          u.searchParams.delete('reply_comment_id')
+          url = u.toString()
+        } catch {}
+      }
+
+      return { url: url || undefined, author: author || undefined, text: text || undefined, image: imgEl?.src || undefined }
+    })
+    return meta
+  } catch (e: any) {
+    console.error('[extractMetaFromPost] erro:', e.message)
+    return null
   }
+}
 
-  if (commentStart) {
-    const cb = await commentStart.boundingBox()
-    // Para o campo "Escreva um comentário" usamos o topo como corte
-    if (cb) bottom = Math.min(bottom, cb.y)
+// Extrai dados completos da visão aberta do post, serve tanto para modal quanto página
+export async function extractDataFromPostModal(page: Page): Promise<{ author: string, text: string, images: string[], timestamp: string } | null> {
+  try {
+    await page.waitForTimeout(1200)
+    const data = await page.evaluate(() => {
+      const root = document.body
+
+      const author =
+        root.querySelector('[data-testid="story-subtitle"] a[role="link"]')?.textContent?.trim() ||
+        root.querySelector('h3 a[role="link"], h4 a[role="link"]')?.textContent?.trim() ||
+        'Desconhecido'
+
+      const textCands = [
+        root.querySelector('[data-ad-preview="message"]'),
+        root.querySelector('[data-testid="post_message"]'),
+        root.querySelector('[data-testid="story-subtitle"] + div'),
+        root.querySelector('div[dir="auto"]')
+      ].filter(Boolean) as Element[]
+      let text = ''
+      for (const t of textCands) {
+        const s = (t.textContent || '').trim()
+        if (s.length > text.length) text = s
+      }
+
+      const images = Array.from(root.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"]'))
+        .map(i => (i as HTMLImageElement).src)
+        .filter(Boolean)
+        .slice(0, 10)
+
+      const timeEl = root.querySelector('abbr[title], time[title], [data-testid="story-subtitle"] a[role="link"] time[title]') as HTMLElement | null
+      const timestamp = timeEl?.getAttribute('title') || timeEl?.textContent || new Date().toISOString()
+
+      return { author, text, images, timestamp }
+    })
+    return data
+  } catch (e: any) {
+    console.error('[extractDataFromPostModal] erro:', e.message)
+    return null
   }
+}
 
-  const height = Math.max(0, bottom - postBox.y)
-  return { x: postBox.x, y: postBox.y, width: postBox.width, height }
+export async function postClipBox(post: ElementHandle, page: Page) {
+  try {
+    const box = await post.boundingBox()
+    return box
+  } catch (e: any) {
+    console.error('[postClipBox] Erro ao calcular clip box:', e.message)
+    return null
+  }
+}
+
+// Abre o post clicando no timestamp ou permalink. Funciona para modal ou navegação.
+export async function openPostModalFromArticle(post: ElementHandle, page: Page): Promise<boolean> {
+  try {
+    await post.scrollIntoViewIfNeeded()
+
+    await post.waitForSelector('a[role="link"] time[title], a[role="link"] abbr[title], a[href*="/permalink/"], a[href*="/posts/"]', { timeout: 3000 }).catch(() => {})
+
+    const sels = [
+      'a[role="link"] time[title]',
+      'a[role="link"] abbr[title]',
+      'a[href*="/permalink/"]',
+      'a[href*="/posts/"]'
+    ]
+
+    let clicked = false
+    for (const s of sels) {
+      const a = await post.$(s)
+      if (a) {
+        await a.click({ button: 'left', delay: 20 })
+        clicked = true
+        break
+      }
+    }
+
+    if (!clicked) {
+      const meta = await extractMetaFromPost(post)
+      if (meta?.url) {
+        await page.goto(meta.url, { waitUntil: 'domcontentloaded' })
+      } else {
+        return false
+      }
+    }
+
+    const opened = await Promise.race([
+      page.waitForSelector('div[role="dialog"] [role="article"]', { timeout: 4000 }).then(() => true).catch(() => false),
+      page.waitForURL('**/permalink/**', { timeout: 4000 }).then(() => true).catch(() => false),
+      page.waitForSelector('[data-testid="story-subtitle"], [data-ad-preview="message"]', { timeout: 4000 }).then(() => true).catch(() => false)
+    ])
+    if (!opened) return false
+
+    await page.waitForTimeout(600)
+    return true
+  } catch (e: any) {
+    console.log('[openPostModalFromArticle] falha:', e.message)
+    return false
+  }
+}
+
+export async function closePostModal(page: Page): Promise<void> {
+  const closeBtn = await page.$('div[aria-label="Fechar"], div[aria-label="Close"], [aria-label*="Close" i]')
+  if (closeBtn) {
+    await closeBtn.click({ delay: 10 })
+    await page.waitForTimeout(200)
+  } else {
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
+  }
+}
+
+// Escuta respostas GraphQL para enriquecer com posts e comentários oficiais
+export function attachGraphQLTap(page: Page, onChunk: (kind: 'posts' | 'comments', payload: any) => void) {
+  page.on('response', async (res) => {
+    try {
+      const url = res.url()
+      if (!url.includes('graphql')) return
+      const text = await res.text()
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+      for (const line of lines) {
+        try {
+          const json = JSON.parse(line)
+          const op = json?.extensions?.operationName || ''
+          if (op.includes('GroupsCometFeedRegularStoriesPaginationQuery')) {
+            onChunk('posts', json)
+          } else if (op.includes('CometFocusedStoryViewUFIQuery')) {
+            onChunk('comments', json)
+          }
+        } catch {}
+      }
+    } catch {}
+  })
 }
