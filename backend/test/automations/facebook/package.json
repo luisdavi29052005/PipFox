@@ -1,0 +1,17 @@
+
+{
+  "name": "@pipefox/facebook-tests",
+  "version": "1.0.0",
+  "description": "Testes integrados para automação do Facebook",
+  "scripts": {
+    "test:login": "tsx testLogin.ts",
+    "test:selectors": "tsx selectorTester.ts",
+    "test:health": "tsx testRunner.ts --only-health",
+    "test:all": "tsx testRunner.ts",
+    "test:quick": "tsx testRunner.ts --max-posts=3",
+    "test:headless": "tsx testRunner.ts --headless",
+    "list:accounts": "tsx testRunner.ts --list-accounts"
+  },
+  "keywords": ["facebook", "automation", "testing", "playwright"],
+  "author": "PipeFox Team"
+}
