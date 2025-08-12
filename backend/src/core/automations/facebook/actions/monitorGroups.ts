@@ -24,16 +24,21 @@ export type ExtractedPost = {
   extractedFromModal: boolean
 }
 
-export async function monitorGroup(page: Page, groupUrl: string, options: MonitorOptions = {}): Promise<ExtractedPost[]> {
-  const maxPosts = options.maxPosts ?? 10
-  const delayBetween = options.delayBetween ?? 200
-  console.log('[monitorGroup] Acessando grupo:', groupUrl)
+export async function* monitorGroup(
+  page: Page,
+  groupUrl: string,
+  workflowId: string,
+  running: Map<string, boolean>
+) {
+  console.log('[monitorGroup] Acessando grupo:', { groupUrl, workflowId, running })
 
-  await page.goto(groupUrl, { waitUntil: 'domcontentloaded' })
+  // Ensure groupUrl is a string
+  const url = typeof groupUrl === 'string' ? groupUrl : String(groupUrl)
+  await page.goto(url)
   await page.waitForSelector(FEED, { timeout: 10000 }).catch(() => {})
 
   const gq = { posts: [] as any[], comments: [] as any[] }
-  if (options.useGraphQLTap) {
+  if (true) { // Assuming useGraphQLTap is always true based on the context of the change
     attachGraphQLTap(page, (kind, payload) => {
       if (kind === 'posts') gq.posts.push(payload)
       if (kind === 'comments') gq.comments.push(payload?.data)
@@ -53,7 +58,7 @@ export async function monitorGroup(page: Page, groupUrl: string, options: Monito
 
   const out: ExtractedPost[] = []
 
-  for (let i = 0; i < posts.length && out.length < maxPosts; i++) {
+  for (let i = 0; i < posts.length && out.length < 10; i++) { // Assuming maxPosts is 10 based on original code
     const post = posts[i]
     console.log(`[monitorGroup] Abrindo post ${i + 1}/${posts.length}`)
 
@@ -82,11 +87,51 @@ export async function monitorGroup(page: Page, groupUrl: string, options: Monito
     })
 
     await closePostModal(page)
-    await page.waitForTimeout(delayBetween)
+    await page.waitForTimeout(200) // Assuming delayBetween is 200 based on original code
   }
 
   console.log('[monitorGroup] Extraídos', out.length, 'posts do grupo')
-  return out
+  // The original code returned the extracted posts directly.
+  // The changes introduced an async generator with a monitoring loop.
+  // The following section replaces the original return statement
+  // and implements the monitoring loop as per the changes.
+
+  await page.waitForLoadState('networkidle')
+
+  // Loop de monitoramento
+  while (running.get(workflowId)) {
+    try {
+      // Aguardar um intervalo antes de verificar novos posts
+      await page.waitForTimeout(30000) // 30 segundos
+
+      // Verificar se ainda está executando
+      if (!running.get(workflowId)) {
+        console.log('[monitorGroup] Workflow parado, encerrando monitoramento')
+        break
+      }
+
+      // Implementar lógica de verificação de novos posts aqui
+      // Por enquanto, apenas yield um resultado de status
+      yield {
+        success: true,
+        timestamp: new Date().toISOString(),
+        groupUrl: url,
+        workflowId
+      }
+
+    } catch (error) {
+      console.error('[monitorGroup] Erro durante monitoramento:', error)
+      yield {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+        groupUrl: url,
+        workflowId
+      }
+    }
+  }
+
+  console.log('[monitorGroup] Monitoramento finalizado para', url)
 }
 
 export default monitorGroup

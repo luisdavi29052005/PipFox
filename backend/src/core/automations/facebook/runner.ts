@@ -6,7 +6,7 @@ import { openContextForAccount } from './session/context'
 import { monitorGroup } from './actions/monitorGroups'
 import { actions } from './actions/actions'
 // Importa a nova função de extração
-import { extractDataFromPostModal } from './utils/facebook-post-selectors' 
+import { extractDataFromPostModal } from './utils/facebook-post-selectors'
 
 /**
  * Config da orquestração
@@ -67,11 +67,12 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
       console.log(`[runner] ❌ Contexto do browser foi desconectado, encerrando workflow`)
       break
     }
-    
+
     console.log(`[runner] ▶️ Monitorando grupo: ${groupUrl}`)
 
     try {
-      for await (const post of monitorGroup(page, { groupUrl, workflowId, running })) {
+      const monitor = monitorGroup(page, groupUrl, workflowId, running)
+      for await (const post of monitor) {
         if (!running.has(workflowId)) break
 
         console.log(`[runner] 📌 Post ${post.contentHash} de ${post.author ?? 'desconhecido'} encontrado.`)
@@ -92,16 +93,16 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
             groupUrl: groupUrl,
             workflowId: workflowId
           }
-          
+
           console.log(`[runner] Enviando dados para n8n:`, {
             author: payload.post.author,
             textLength: payload.post.text.length,
             imagesCount: payload.post.images.length
           })
-          
+
           await sendToN8n(n8nWebhookUrl, payload)
         }
-        
+
         // Lógica antiga de comentário direto foi removida,
         // pois agora depende do webhook.
       }
