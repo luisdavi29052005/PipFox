@@ -1,17 +1,31 @@
-
 {
   "name": "@pipefox/facebook-tests",
   "version": "1.0.0",
   "description": "Testes integrados para automação do Facebook",
   "scripts": {
-    "test:login": "tsx testLogin.ts",
-    "test:selectors": "tsx selectorTester.ts",
+    "help": "tsx testRunner.ts --help",
+    "test:login": "tsx testRunner.ts --only-login",
     "test:health": "tsx testRunner.ts --only-health",
+    "test:selectors": "tsx testRunner.ts --only-selectors",
+    "test:selectors-only": "tsx selectorTester.ts auto auto https://www.facebook.com/groups/940840924057399",
     "test:all": "tsx testRunner.ts",
-    "test:quick": "tsx testRunner.ts --max-posts=3",
+    "test:quick": "tsx testRunner.ts --max-posts=3 --only-login",
     "test:headless": "tsx testRunner.ts --headless",
-    "list:accounts": "tsx testRunner.ts --list-accounts"
+    "test:dev": "tsx testRunner.ts --max-posts=2",
+    "accounts": "tsx testRunner.ts --list-accounts",
+    "docs": "tsx testRunner.ts --help",
+    "web": "node server.js",
+    "web:install": "npm install express cors"
   },
-  "keywords": ["facebook", "automation", "testing", "playwright"],
-  "author": "PipeFox Team"
+  "keywords": [
+    "facebook",
+    "automation",
+    "testing",
+    "playwright"
+  ],
+  "author": "PipeFox Team",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
 }

@@ -1,4 +1,3 @@
-
 import { testLogin } from './testLogin'
 import { testSelectors, SelectorTestOptions } from './selectorTester'
 import { runHealthCheck } from '../../../src/core/automations/facebook/utils/health-check'
@@ -15,6 +14,61 @@ interface TestRunnerOptions {
 }
 
 /**
+ * Mostra ajuda completa do sistema de testes
+ */
+function showHelp() {
+  console.log(`
+🧪 SISTEMA DE TESTES DO FACEBOOK - PIPEFOX
+==========================================
+
+📋 COMANDOS PRINCIPAIS:
+  npm run test:all           - 🚀 Executar TODOS os testes (recomendado)
+  npm run test:selectors     - 🎯 Testar extração de posts (PRINCIPAL)
+  npm run test:login         - 🔑 Testar apenas login/sessão
+  npm run test:health        - 🏥 Health check básico
+  npm run test:quick         - ⚡ Teste rápido (3 posts + login)
+  npm run test:headless      - 👻 Modo headless (sem interface)
+
+📋 COMANDOS AUXILIARES:
+  npm run test:selectors-only - Seletores standalone (sem relatório)
+  npm run accounts           - 📋 Listar contas disponíveis
+  npm run help               - ❓ Mostrar esta ajuda
+  npm run docs               - 📖 Documentação completa
+
+🎛️ PARÂMETROS AVANÇADOS:
+  --headless                 - Executar sem interface gráfica
+  --max-posts=N              - Processar no máximo N posts (padrão: 5)
+  --only-login               - Apenas teste de login
+  --only-selectors           - Apenas teste de seletores  
+  --only-health              - Apenas health check
+  --list-accounts            - Listar contas disponíveis
+
+🚀 EXEMPLOS DE USO:
+  # Teste completo com IDs automáticos
+  npx tsx testRunner.ts auto auto
+
+  # Apenas seletores, modo headless, 10 posts
+  npx tsx testRunner.ts auto auto --only-selectors --headless --max-posts=10
+
+  # Teste rápido para desenvolvimento
+  npm run test:quick
+
+🔧 VARIÁVEIS DE AMBIENTE:
+  WEBHOOK_URL               - URL para receber dados extraídos dos posts
+
+🎯 FOCO PRINCIPAL:
+  O teste 'selectors' é o mais importante! Ele:
+  - Encontra posts no feed do Facebook
+  - Clica nos timestamps (1h, 2min, etc.) para abrir posts
+  - Extrai dados completos: autor, texto, imagens
+  - Envia para webhook se configurado
+
+📖 DOCUMENTAÇÃO COMPLETA:
+  cat backend/test/automations/facebook/HELP.md
+    `)
+}
+
+/**
  * Executor principal de testes integrado com o sistema oficial
  */
 export async function runTests(options: TestRunnerOptions) {
@@ -28,13 +82,14 @@ export async function runTests(options: TestRunnerOptions) {
     tests = ['login', 'health', 'selectors']
   } = options
 
-  console.log('🧪 INICIANDO BATERIA DE TESTES')
-  console.log('================================')
-  console.log(`Usuario: ${userId}`)
-  console.log(`Conta: ${accountId}`)
-  console.log(`Grupo: ${groupUrl}`)
-  console.log(`Testes: ${tests.join(', ')}`)
-  console.log('')
+  console.log('🧪 INICIANDO BATERIA DE TESTES');
+  console.log('================================');
+  console.log(`Usuario: ${userId}`);
+  console.log(`Conta: ${accountId}`);
+  console.log(`Grupo: ${groupUrl}`);
+  console.log(`Max Posts: ${maxPosts}`);
+  console.log(`Testes: ${tests.join(', ')}`);
+  console.log('');
 
   const results: { [key: string]: boolean } = {}
 
@@ -80,25 +135,26 @@ export async function runTests(options: TestRunnerOptions) {
     if (tests.includes('selectors')) {
       console.log('🎯 TESTE DE SELETORES')
       console.log('----------------------')
-      if (!results.login) {
-        console.log('❌ Pulando teste de seletores - login falhou')
+
+      // Se login não foi testado ou falhou, avisa mas continua (seletores tem seu próprio login)
+      if (tests.includes('login') && !results.login) {
+        console.log('⚠️ Login falhou, mas tentando seletores mesmo assim...')
+      }
+
+      try {
+        await testSelectors({
+          userId,
+          accountId,
+          groupUrl,
+          webhookUrl,
+          headless,
+          maxPosts
+        })
+        results.selectors = true
+        console.log('✅ Teste de seletores concluído')
+      } catch (error) {
+        console.error('❌ Erro no teste de seletores:', error)
         results.selectors = false
-      } else {
-        try {
-          await testSelectors({
-            userId,
-            accountId,
-            groupUrl,
-            webhookUrl,
-            headless,
-            maxPosts
-          })
-          results.selectors = true
-          console.log('✅ Teste de seletores concluído')
-        } catch (error) {
-          console.error('❌ Erro no teste de seletores:', error)
-          results.selectors = false
-        }
       }
       console.log('')
     }
@@ -108,21 +164,21 @@ export async function runTests(options: TestRunnerOptions) {
     console.log('==================')
     const totalTests = tests.length
     const successCount = Object.values(results).filter(Boolean).length
-    
+
     for (const test of tests) {
       const status = results[test] ? '✅' : '❌'
       console.log(`${status} ${test.toUpperCase()}`)
     }
-    
+
     console.log('')
     console.log(`Testes executados: ${totalTests}`)
     console.log(`Sucessos: ${successCount}`)
     console.log(`Falhas: ${totalTests - successCount}`)
     console.log(`Taxa de sucesso: ${Math.round((successCount / totalTests) * 100)}%`)
-    
+
     const overallSuccess = successCount === totalTests
     console.log(`Status geral: ${overallSuccess ? '✅ TODOS PASSARAM' : '❌ ALGUMAS FALHAS'}`)
-    
+
     return {
       success: overallSuccess,
       results,
@@ -139,40 +195,98 @@ export async function runTests(options: TestRunnerOptions) {
 // CLI Interface
 if (require.main === module) {
   async function main() {
+    const args = process.argv.slice(2);
+
+    // Verificar comandos de ajuda
+    if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
+      showHelp()
+      return
+    }
+
     // Verificar se é para listar contas
-    if (process.argv.includes('--list-accounts')) {
+    if (args.includes('--list-accounts')) {
       await listAccounts()
       return
     }
 
-    // Obter IDs - usar dos argumentos ou buscar automaticamente
-    let userId = process.argv[2]
-    let accountId = process.argv[3]
-    
-    // Se não foram fornecidos IDs, buscar automaticamente
-    if (!userId || !accountId || userId === 'auto' || accountId === 'auto') {
-      console.log('🔄 Buscando IDs automaticamente...')
-      const testIds = await getTestIds()
-      
-      if (!testIds) {
-        console.error('❌ Não foi possível obter IDs de teste')
-        console.log('💡 Dica: Use --list-accounts para ver contas disponíveis')
-        process.exit(1)
+    // Parse options first
+    const options: { [key: string]: string } = {};
+    const nonOptionArgs: string[] = [];
+
+    for (const arg of args) {
+      if (arg.startsWith('--')) {
+        const [key, value] = arg.split('=');
+        options[key.substring(2)] = value || 'true';
+      } else {
+        nonOptionArgs.push(arg);
       }
-      
-      userId = testIds.userId
-      accountId = testIds.accountId
-      console.log(`✅ Usando conta: ${testIds.accountName} (${testIds.status})`)
     }
-    
-    const groupUrl = process.argv[4] || 'https://www.facebook.com/groups/940840924057399'
-    const headless = process.argv.includes('--headless')
-    const maxPosts = parseInt(process.argv.find(arg => arg.startsWith('--max-posts='))?.split('=')[1] || '5')
-    
-    let tests: ('login' | 'selectors' | 'health')[] = ['login', 'health', 'selectors']
-    if (process.argv.includes('--only-login')) tests = ['login']
-    if (process.argv.includes('--only-health')) tests = ['health']
-    if (process.argv.includes('--only-selectors')) tests = ['selectors']
+
+    // Suporte para execução simplificada com auto IDs
+    let userId: string;
+    let accountId: string;
+    let groupUrl: string;
+
+    // Caso 1: Auto discovery completo - apenas opções
+    if (nonOptionArgs.length === 0) {
+      console.log('🔄 Buscando IDs e URL automaticamente...');
+      const testIds = await getTestIds();
+
+      if (!testIds) {
+        console.error('❌ Não foi possível obter IDs de teste');
+        console.log('💡 Dica: Use --list-accounts para ver contas disponíveis');
+        process.exit(1);
+      }
+
+      userId = testIds.userId;
+      accountId = testIds.accountId;
+      groupUrl = 'https://www.facebook.com/groups/940840924057399'; // URL padrão
+      console.log(`✅ Usando conta: ${testIds.accountName} (${testIds.status})`);
+    }
+    // Caso 2: Argumentos tradicionais (userId accountId groupUrl)
+    else if (nonOptionArgs.length >= 3) {
+      userId = nonOptionArgs[0];
+      accountId = nonOptionArgs[1];
+      groupUrl = nonOptionArgs[2];
+
+      // If no user/account IDs provided, fetch automatically
+      if (userId === 'auto' || accountId === 'auto') {
+        console.log('🔄 Buscando IDs automaticamente...');
+        const testIds = await getTestIds();
+
+        if (!testIds) {
+          console.error('❌ Não foi possível obter IDs de teste');
+          console.log('💡 Dica: Use --list-accounts para ver contas disponíveis');
+          process.exit(1);
+        }
+
+        userId = testIds.userId;
+        accountId = testIds.accountId;
+        console.log(`✅ Usando conta: ${testIds.accountName} (${testIds.status})`);
+      }
+    }
+    // Caso 3: Help/Erro
+    else {
+      console.log('❌ Argumentos insuficientes ou inválidos');
+      console.log('');
+      console.log('📖 AJUDA RÁPIDA:');
+      console.log('  npx tsx testRunner.ts --help                        # Ajuda completa');
+      console.log('  npx tsx testRunner.ts --list-accounts               # Ver contas');
+      console.log('  npx tsx testRunner.ts --max-posts=3 --only-login    # Teste rápido');
+      console.log('  npx tsx testRunner.ts                               # Auto discovery');
+      console.log('');
+      console.log('💡 Use --help para ver todos os comandos e funcionalidades disponíveis');
+      process.exit(1);
+    }
+
+    // Parse max-posts option
+    const maxPosts = options['max-posts'] ? parseInt(options['max-posts']) : 5;
+    const headless = options['headless'] === 'true';
+
+    let tests: ('login' | 'selectors' | 'health')[] = ['login', 'health', 'selectors'];
+    if (options['only-login'] === 'true') tests = ['login'];
+    if (options['only-health'] === 'true') tests = ['health'];
+    if (options['only-selectors'] === 'true') tests = ['selectors'];
 
     try {
       const result = await runTests({

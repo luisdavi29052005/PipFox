@@ -87,54 +87,145 @@ export type PostData = {
 }
 
 async function parseModal(page: Page): Promise<PostData> {
+  // Aguarda um pouco para garantir que o modal/página carregou
+  await sleep(1000);
+  
   return await page.evaluate(() => {
-    const dialog = document.querySelector('div[role="dialog"][aria-modal="true"]') as HTMLElement | null
+    // Tenta encontrar o modal primeiro, senão usa o body (para posts que abrem em nova página)
+    const dialog = document.querySelector('div[role="dialog"][aria-modal="true"]') as HTMLElement | null;
+    const container = dialog || document.body;
+    
     const pickText = (el: Element | null): string | null => {
-      if (!el) return null
+      if (!el) return null;
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
         acceptNode: (n) => {
-          const t = n.textContent?.trim() || ''
-          return t.length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+          const t = n.textContent?.trim() || '';
+          return t.length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
         },
-      })
-      const parts: string[] = []
-      while (walker.nextNode()) parts.push(walker.currentNode.textContent!.trim())
-      const joined = parts.join(' ').replace(/\s+/g, ' ').trim()
-      return joined || null
+      });
+      const parts: string[] = [];
+      while (walker.nextNode()) parts.push(walker.currentNode.textContent!.trim());
+      const joined = parts.join(' ').replace(/\s+/g, ' ').trim();
+      return joined || null;
+    };
+
+    // Encontra o article principal
+    const article = container.querySelector('div[role="article"]') || container;
+
+    // Busca permalink usando várias estratégias
+    const timestampSelectors = [
+      'a[href*="/groups/"][href*="/posts/"]:has(time)',
+      'a[href*="/posts/"]:has(time)',
+      'a:has(time[datetime])',
+      'a:has(abbr[data-utime])',
+      'time[datetime]',
+      'abbr[data-utime]'
+    ];
+
+    let permalink = null;
+    let timeEl = null;
+
+    for (const selector of timestampSelectors) {
+      const el = container.querySelector(selector);
+      if (el) {
+        if (el.tagName === 'A') {
+          permalink = (el as HTMLAnchorElement).href;
+          timeEl = el.querySelector('time, abbr');
+          break;
+        } else if (el.tagName === 'TIME' || el.tagName === 'ABBR') {
+          timeEl = el;
+          const parentLink = el.closest('a');
+          if (parentLink) {
+            permalink = parentLink.href;
+          }
+          break;
+        }
+      }
     }
 
-    if (!dialog) {
-      return { postId: null, permalink: null, authorName: null, authorUrl: null, timeISO: null, timeText: null, text: null, imageUrls: [] }
+    // Se não achou permalink, tenta pegar da URL atual
+    if (!permalink && window.location.href.includes('/posts/')) {
+      permalink = window.location.href;
     }
 
-    const article = dialog.querySelector('div[role="article"]') || dialog
-    const tsA = dialog.querySelector('a[href*="/groups/"][href*="/posts/"]:has(time)') || dialog.querySelector('a:has(time)')
-    const permalink = tsA instanceof HTMLAnchorElement ? tsA.href : null
-    const timeEl = tsA?.querySelector('time') as HTMLElement | null
-    const authorA = article.querySelector('h2 strong a, h3 strong a, a[aria-current="page"], a[role="link"][tabindex="0"]') as HTMLAnchorElement | null
-    const textContainer = article.querySelector('[data-ad-preview="message"], div[dir="auto"], span[dir="auto"]') || article
-    const imgEls = Array.from(article.querySelectorAll('img[src]')) as HTMLImageElement[]
+    // Busca autor usando múltiplas estratégias
+    const authorSelectors = [
+      'h2 strong a[role="link"]',
+      'h3 strong a[role="link"]',
+      'h4 strong a[role="link"]',
+      '[data-testid="story-subtitle"] a[role="link"]',
+      'strong a[href*="/user/"]',
+      'strong a[href*="/profile.php"]',
+      'span[dir="ltr"] strong a'
+    ];
+
+    let authorA = null;
+    for (const selector of authorSelectors) {
+      authorA = article.querySelector(selector) as HTMLAnchorElement | null;
+      if (authorA && authorA.textContent?.trim()) {
+        break;
+      }
+    }
+
+    // Busca texto do post usando múltiplas estratégias
+    const textSelectors = [
+      '[data-ad-preview="message"]',
+      '[data-testid="post_message"]',
+      '[data-ad-comet-preview="message"]',
+      'div[dir="auto"][style*="text-align"]',
+      'div[data-testid*="story"] div[dir="auto"]',
+      'span[dir="auto"]'
+    ];
+
+    let bestText = '';
+    let maxLength = 0;
+
+    for (const selector of textSelectors) {
+      const elements = article.querySelectorAll(selector);
+      elements.forEach(el => {
+        const text = pickText(el);
+        if (text && text.length > maxLength && text.length > 10) {
+          bestText = text;
+          maxLength = text.length;
+        }
+      });
+    }
+
+    // Busca imagens, filtrando emoji e perfis
+    const imgEls = Array.from(article.querySelectorAll('img[src]')) as HTMLImageElement[];
     const images = Array.from(new Set(
       imgEls
-        .map((i) => i.src)
-        .filter((src) => src && !/static|emoji|profile|transparent/i.test(src))
-        .slice(0, 12),
-    ))
+        .map(i => i.src)
+        .filter(src => 
+          src && 
+          !src.includes('emoji') && 
+          !src.includes('static') && 
+          !src.includes('profile') && 
+          !src.includes('transparent') &&
+          (src.includes('scontent') || src.includes('fbcdn'))
+        )
+        .slice(0, 12)
+    ));
 
-    const href = permalink || ''
-    const m = href.match(/\/posts\/(\d+)/)
+    // Extrai ID do post
+    const href = permalink || '';
+    const postIdMatch = href.match(/\/posts\/(\d+)|\/permalink\/(\d+)|story_fbid=(\d+)/);
+    const postId = postIdMatch ? (postIdMatch[1] || postIdMatch[2] || postIdMatch[3]) : null;
 
-    return {
-      postId: m ? m[1] : null,
+    const result = {
+      postId,
       permalink,
-      authorName: authorA?.innerText || null,
+      authorName: authorA?.textContent?.trim() || null,
       authorUrl: authorA?.href || null,
-      timeISO: timeEl?.getAttribute('datetime') || null,
+      timeISO: (timeEl as any)?.getAttribute?.('datetime') || (timeEl as any)?.getAttribute?.('data-utime') || null,
       timeText: timeEl?.textContent?.trim() || null,
-      text: pickText(textContainer),
-      imageUrls: images,
-    }
-  })
+      text: bestText || null,
+      imageUrls: images
+    };
+
+    console.log('[parseModal] Resultado:', result);
+    return result;
+  });
 }
 
 export interface SelectorTestOptions {
@@ -146,6 +237,54 @@ export interface SelectorTestOptions {
   maxPosts?: number
   maxScrolls?: number
   pauseBetweenPostsMs?: [number, number]
+}
+
+// CLI Interface
+if (require.main === module) {
+  async function main() {
+    const { getTestIds } = await import('./helpers/getTestIds')
+    
+    let userId = process.argv[2]
+    let accountId = process.argv[3]
+    const groupUrl = process.argv[4] || 'https://www.facebook.com/groups/940840924057399'
+    const headless = process.argv.includes('--headless')
+    const maxPosts = parseInt(process.argv.find(arg => arg.startsWith('--max-posts='))?.split('=')[1] || '5')
+
+    // Auto discovery
+    if (!userId || !accountId || userId === 'auto' || accountId === 'auto') {
+      console.log('🔄 Buscando IDs automaticamente...')
+      const testIds = await getTestIds()
+
+      if (!testIds) {
+        console.error('❌ Não foi possível obter IDs de teste')
+        process.exit(1)
+      }
+
+      userId = testIds.userId
+      accountId = testIds.accountId
+      console.log(`✅ Usando conta: ${testIds.accountName} (${testIds.status})`)
+    }
+
+    try {
+      await testSelectors({
+        userId,
+        accountId,
+        groupUrl,
+        headless,
+        maxPosts
+      })
+      console.log('✅ Teste standalone concluído com sucesso')
+      process.exit(0)
+    } catch (err) {
+      console.error('❌ Erro no teste standalone:', err)
+      process.exit(1)
+    }
+  }
+
+  main().catch(err => {
+    console.error('💥 Erro fatal:', err)
+    process.exit(1)
+  })
 }
 
 /**
@@ -187,80 +326,185 @@ export async function testSelectors(options: SelectorTestOptions) {
       console.log(`[selectorTester] Encontrados ${count} articles na página`)
 
       let navigatedAway = false;
+      let processedInThisRound = 0;
 
       for (let i = 0; i < count; i++) {
         if (processed >= maxPosts) break
 
         const post = articles.nth(i)
         
-        const tsLink = post.locator('a[href*="/groups/"][href*="/posts/"]:has(time), a:has(time)').first()
-        if (!(await tsLink.count())) continue
+        // Estratégia otimizada para encontrar timestamp links baseada na estrutura real do Facebook
+        const tsSelectors = [
+          // Estratégia 1: Link direto com href de post
+          'a[href*="/posts/"][role="link"]',
+          'a[href*="/permalink/"][role="link"]',
+          
+          // Estratégia 2: Links que contêm elementos de tempo (estrutura observada)
+          'a[role="link"]:has(span span b)',  // Como "1h" dividido em <b>1</b><b>h</b>
+          'a[href*="/posts/"]:has(b)',
+          
+          // Estratégia 3: Seletores tradicionais
+          'a[href*="/groups/"][href*="/posts/"]:has(time)',
+          'a[href*="/posts/"]:has(time)', 
+          'a:has(time)',
+          'a:has(abbr[data-utime])'
+        ];
 
-        const href = await tsLink.getAttribute('href')
-        const postId = extractPostId(href)
+        let tsLink = null;
+        let href = null;
+
+        for (const selector of tsSelectors) {
+          try {
+            const linkLocator = post.locator(selector).first();
+            if (await linkLocator.count() > 0) {
+              tsLink = linkLocator;
+              href = await tsLink.getAttribute('href');
+              
+              // Validação mais robusta do href
+              if (href && (
+                href.includes('/posts/') || 
+                href.includes('/permalink/') ||
+                href.includes('story_fbid=') ||
+                href.match(/facebook\.com\/.*\/\d+/) // Pattern genérico para posts
+              )) {
+                // Teste adicional: verificar se o link contém texto de tempo
+                const linkText = await tsLink.textContent().catch(() => '');
+                const hasTimePattern = /\d+\s*(h|min|dia|day|hora|m|s|seg|second|minute|hour)/.test(linkText || '');
+                
+                if (hasTimePattern || selector.includes('/posts/')) {
+                  console.log(`[selectorTester] Timestamp encontrado via: ${selector}, href: ${href}, texto: "${linkText}"`);
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+
+        if (!tsLink || !href) {
+          console.log(`[selectorTester] Post ${i + 1}: Não encontrou timestamp clicável`);
+          continue;
+        }
+
+        const postId = extractPostId(href);
 
         if (!postId || seen.has(postId)) {
-          continue
+          console.log(`[selectorTester] Post ${i + 1}: ID ${postId} já processado ou inválido`);
+          continue;
         }
         
-        console.log(`[selectorTester] Processando post ${processed + 1}/${maxPosts}: ${postId}`)
-
-        const modalPromise = page.locator('div[role="dialog"][aria-modal="true"]').waitFor({ state: 'visible', timeout: 15000 }).then(() => 'modal' as const).catch(() => null)
-        const urlPromise = page.waitForURL(/\/posts\//, { timeout: 15000 }).then(() => 'page' as const).catch(() => null)
-        await tsLink.click({ delay: rand(40, 120) }).catch(err => console.warn("Click failed, skipping post:", err.message));
-        const mode = (await Promise.race([modalPromise, urlPromise])) || (page.url().includes('/posts/') ? 'page' : 'modal')
-
-        seen.add(postId)
+        seen.add(postId);
+        console.log(`[selectorTester] Processando post ${processed + 1}/${maxPosts}: ${postId}`);
 
         try {
-          const data = await parseModal(page)
-          const payload = { ...data, postId: data.postId || postId, groupUrl }
+          // Scroll para o post estar visível
+          await post.scrollIntoViewIfNeeded();
+          await sleep(500);
+
+          // Promise para detectar se abre modal ou navega para nova página
+          const modalPromise = page.locator('div[role="dialog"][aria-modal="true"]').waitFor({ 
+            state: 'visible', 
+            timeout: 10000 
+          }).then(() => 'modal' as const).catch(() => null);
+          
+          const urlPromise = page.waitForURL(/\/posts\/|\/permalink\//, { 
+            timeout: 10000 
+          }).then(() => 'page' as const).catch(() => null);
+
+          // Clica no timestamp
+          console.log(`[selectorTester] Clicando no timestamp do post ${postId}`);
+          await tsLink.click({ delay: rand(50, 150) });
+
+          // Aguarda modal ou navegação
+          const mode = await Promise.race([modalPromise, urlPromise, sleep(3000).then(() => null)]);
+
+          if (!mode) {
+            console.warn(`[selectorTester] Post ${postId}: Timeout - nem modal nem navegação detectada`);
+            continue;
+          }
+
+          console.log(`[selectorTester] Post ${postId}: Aberto via ${mode}`);
+          await sleep(1000); // Aguarda carregamento
+
+          // Extrai dados do post
+          const data = await parseModal(page);
+          const payload = { ...data, postId: data.postId || postId, groupUrl };
           
           console.log(`[selectorTester] Dados extraídos:`, {
             postId: payload.postId,
             author: payload.authorName,
             textLength: payload.text?.length || 0,
             images: payload.imageUrls.length
-          })
+          });
 
           if (webhookUrl) {
             try {
-              await sendToWebhook(payload, webhookUrl)
-              console.log(`[selectorTester] Dados enviados para webhook`)
+              await sendToWebhook(payload, webhookUrl);
+              console.log(`[selectorTester] Dados enviados para webhook`);
             } catch (err) {
-              console.warn(`[selectorTester] Erro no webhook para post ${payload.postId}:`, (err as Error).message)
+              console.warn(`[selectorTester] Erro no webhook para post ${payload.postId}:`, (err as Error).message);
             }
           }
 
-          processed++
+          processed++;
+          processedInThisRound++;
           
+          // Fechar modal ou voltar à página anterior
           if (mode === 'modal') {
-            await closePostModal(page)
+            await closePostModal(page);
+            await sleep(500);
+            
+            // Verifica se ainda está na página do grupo
+            if (!page.url().includes(groupUrl)) {
+              await page.goto(groupUrl, { waitUntil: 'domcontentloaded' });
+              await ensureLoggedIn(page, groupUrl);
+              navigatedAway = true;
+              break;
+            }
           } else {
-            await page.goBack({ waitUntil: 'domcontentloaded' })
-            await ensureLoggedIn(page, groupUrl)
+            await page.goBack({ waitUntil: 'domcontentloaded' });
+            await ensureLoggedIn(page, groupUrl);
             navigatedAway = true;
             break; 
           }
         } catch (e) {
-          console.warn(`[selectorTester] Erro ao processar post ${postId}:`, e)
-          if (!page.url().includes('/groups/')) {
-            await page.goto(groupUrl, { waitUntil: 'domcontentloaded' }).catch(err => console.error('Failed to navigate back', err))
-            await ensureLoggedIn(page, groupUrl)
-            navigatedAway = true;
+          console.warn(`[selectorTester] Erro ao processar post ${postId}:`, (e as Error).message);
+          
+          // Tenta voltar para a página do grupo
+          try {
+            if (!page.url().includes(groupUrl)) {
+              await page.goto(groupUrl, { waitUntil: 'domcontentloaded' });
+              await ensureLoggedIn(page, groupUrl);
+              navigatedAway = true;
+              break;
+            }
+          } catch (navError) {
+            console.error(`[selectorTester] Erro fatal de navegação:`, navError);
             break;
           }
         }
-        await sleep(rand(...pauseBetweenPostsMs))
+        
+        await sleep(rand(...pauseBetweenPostsMs));
       }
 
-      if (processed >= maxPosts) break
-      if (navigatedAway) continue;
+      if (processed >= maxPosts) {
+        console.log(`[selectorTester] Meta de ${maxPosts} posts atingida`);
+        break;
+      }
+      
+      if (navigatedAway) {
+        console.log(`[selectorTester] Navegou para fora, recarregando artigos...`);
+        continue;
+      }
 
-      scrolls++
-      console.log(`[selectorTester] Scroll ${scrolls}/${maxScrolls}`)
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.9)).catch(()=>{})
-      await sleep(rand(900, 1600))
+      // Se não processou nenhum post nesta rodada, faz scroll
+      if (processedInThisRound === 0) {
+        scrolls++;
+        console.log(`[selectorTester] Scroll ${scrolls}/${maxScrolls} (nenhum post processado nesta rodada)`);
+        await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.9)).catch(()=>{});
+        await sleep(rand(1200, 2000));
+      }
     }
 
     console.log(`[selectorTester] ✅ Finalizado. Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`)

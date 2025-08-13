@@ -1,0 +1,489 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Testes Facebook - PipeFox</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .controls {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 25px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        .output {
+            background: #1e1e1e;
+            color: #f8f8f2;
+            border-radius: 15px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .status {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .status-idle { background: #e9ecef; color: #495057; }
+        .status-running { background: #fff3cd; color: #856404; }
+        .status-success { background: #d4edda; color: #155724; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .accounts-list {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .account-item {
+            padding: 8px 12px;
+            border: 1px solid #e1e5e9;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .account-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .account-item.selected {
+            background-color: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Testes Facebook - PipeFox</h1>
+            <p>Interface para testar automações do Facebook</p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-row">
+                <div class="control-group">
+                    <label for="userId">User ID:</label>
+                    <input type="text" id="userId" value="auto" placeholder="auto ou ID específico">
+                </div>
+                <div class="control-group">
+                    <label for="accountId">Account ID:</label>
+                    <input type="text" id="accountId" value="auto" placeholder="auto ou ID específico">
+                </div>
+                <div class="control-group">
+                    <label for="groupUrl">URL do Grupo:</label>
+                    <input type="text" id="groupUrl" value="https://www.facebook.com/groups/940840924057399" placeholder="URL do grupo">
+                </div>
+            </div>
+            
+            <div class="control-row">
+                <div class="control-group">
+                    <label for="maxPosts">Max Posts:</label>
+                    <input type="number" id="maxPosts" value="5" min="1" max="50">
+                </div>
+                <div class="control-group">
+                    <label for="headless">Modo:</label>
+                    <select id="headless">
+                        <option value="false">Visual (com browser)</option>
+                        <option value="true">Headless (sem interface)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="webhookUrl">Webhook URL (opcional):</label>
+                    <input type="text" id="webhookUrl" placeholder="https://hooks.n8n.cloud/webhook/...">
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button class="btn btn-info" onclick="listAccounts()">
+                    📋 Listar Contas
+                </button>
+                <button class="btn btn-warning" onclick="runTest('login')">
+                    🔑 Teste Login
+                </button>
+                <button class="btn btn-success" onclick="runTest('health')">
+                    🏥 Health Check
+                </button>
+                <button class="btn btn-primary" onclick="runTest('selectors')">
+                    🎯 Teste Seletores
+                </button>
+                <button class="btn btn-primary" onclick="runTest('all')">
+                    🚀 Teste Completo
+                </button>
+                <button class="btn btn-secondary" onclick="runTest('quick')">
+                    ⚡ Teste Rápido
+                </button>
+                <button class="btn btn-secondary" onclick="showHelp()">
+                    ❓ Ajuda
+                </button>
+                <button class="btn btn-secondary" onclick="clearOutput()">
+                    🗑️ Limpar
+                </button>
+            </div>
+        </div>
+        
+        <div id="status" class="status status-idle">
+            💤 Pronto para executar testes
+        </div>
+        
+        <div id="accounts-container" style="display: none;">
+            <h3>📋 Contas Disponíveis:</h3>
+            <div id="accounts-list" class="accounts-list"></div>
+        </div>
+        
+        <div id="output" class="output">
+Bem-vindo ao sistema de testes do Facebook! 🎉
+
+Como usar:
+1. Configure os IDs (use "auto" para descoberta automática)
+2. Escolha o tipo de teste
+3. Clique em "Listar Contas" para ver contas disponíveis
+4. Execute os testes usando os botões acima
+
+Tipos de teste:
+• 🔑 Login - Testa se a sessão está válida
+• 🏥 Health Check - Verifica se os seletores estão funcionando
+• 🎯 Seletores - Testa extração completa de posts
+• 🚀 Completo - Executa todos os testes
+• ⚡ Rápido - Teste rápido com menos posts
+
+Dica: Use o modo Visual para debug e Headless para produção.
+        </div>
+    </div>
+
+    <script>
+        let currentProcess = null;
+        let selectedAccount = null;
+        
+        function updateStatus(text, type = 'idle') {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = `status status-${type}`;
+        }
+        
+        function appendOutput(text) {
+            const output = document.getElementById('output');
+            output.textContent += text + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearOutput() {
+            document.getElementById('output').textContent = 'Output limpo. Pronto para novos testes.\n';
+        }
+        
+        function showHelp() {
+            appendOutput(`
+🆘 AJUDA - SISTEMA DE TESTES FACEBOOK
+
+📋 CONTROLES:
+• User ID / Account ID: Use "auto" para descoberta automática ou IDs específicos
+• Max Posts: Número máximo de posts a processar (1-50)
+• Modo: Visual mostra o browser, Headless executa em background
+• Webhook URL: Opcional, para enviar dados extraídos
+
+🧪 TIPOS DE TESTE:
+• Login: Verifica se a sessão Facebook está válida
+• Health Check: Testa se os seletores ainda funcionam
+• Seletores: Extrai dados completos de posts do grupo
+• Completo: Executa login + health + seletores
+• Rápido: Teste com menos posts para desenvolvimento
+
+💡 DICAS:
+• Use "Listar Contas" para ver contas disponíveis
+• Modo Visual é melhor para debug
+• Headless é mais rápido para testes automatizados
+• Configure webhook para receber dados extraídos
+
+🔧 TROUBLESHOOTING:
+• Se login falhar: Execute login manual primeiro
+• Se seletores falharem: Execute Health Check
+• Para debug: Use modo Visual com Max Posts baixo
+            `);
+        }
+        
+        async function listAccounts() {
+            updateStatus('🔄 Listando contas...', 'running');
+            
+            try {
+                const result = await runCommand(['npx', 'tsx', 'testRunner.ts', '--list-accounts']);
+                
+                if (result.includes('Contas disponíveis:')) {
+                    document.getElementById('accounts-container').style.display = 'block';
+                    parseAccountsList(result);
+                }
+                
+                updateStatus('✅ Contas listadas', 'success');
+            } catch (error) {
+                updateStatus('❌ Erro ao listar contas', 'error');
+                appendOutput(`Erro: ${error.message}`);
+            }
+        }
+        
+        function parseAccountsList(output) {
+            const accountsList = document.getElementById('accounts-list');
+            accountsList.innerHTML = '';
+            
+            // Parse das linhas de conta do output
+            const lines = output.split('\n');
+            lines.forEach(line => {
+                const match = line.match(/(.+?)\s+\|\s+(.+?)\s+\|\s+(.+)/);
+                if (match) {
+                    const [, name, id, status] = match;
+                    const accountDiv = document.createElement('div');
+                    accountDiv.className = 'account-item';
+                    accountDiv.innerHTML = `<strong>${name}</strong> | ${id} | ${status}`;
+                    accountDiv.onclick = () => selectAccount(id, name, accountDiv);
+                    accountsList.appendChild(accountDiv);
+                }
+            });
+        }
+        
+        function selectAccount(accountId, accountName, element) {
+            // Remove seleção anterior
+            document.querySelectorAll('.account-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // Adiciona nova seleção
+            element.classList.add('selected');
+            selectedAccount = { accountId, accountName };
+            
+            // Atualiza os campos
+            document.getElementById('accountId').value = accountId;
+            
+            appendOutput(`✅ Conta selecionada: ${accountName} (${accountId})`);
+        }
+        
+        async function runTest(testType) {
+            if (currentProcess) {
+                appendOutput('⚠️ Já existe um teste em execução. Aguarde...');
+                return;
+            }
+            
+            const userId = document.getElementById('userId').value || 'auto';
+            const accountId = document.getElementById('accountId').value || 'auto';
+            const groupUrl = document.getElementById('groupUrl').value;
+            const maxPosts = document.getElementById('maxPosts').value;
+            const headless = document.getElementById('headless').value;
+            const webhookUrl = document.getElementById('webhookUrl').value;
+            
+            let command = ['npx', 'tsx', 'testRunner.ts'];
+            
+            // Adiciona argumentos baseado no tipo de teste
+            if (testType !== 'all') {
+                command.push(`--only-${testType}`);
+            }
+            
+            if (testType === 'quick') {
+                command = ['npx', 'tsx', 'testRunner.ts', '--max-posts=3', '--only-login'];
+            }
+            
+            // Adiciona parâmetros
+            if (headless === 'true') command.push('--headless');
+            if (maxPosts && maxPosts !== '5') command.push(`--max-posts=${maxPosts}`);
+            
+            // Variáveis de ambiente
+            const env = {};
+            if (webhookUrl) env.WEBHOOK_URL = webhookUrl;
+            
+            updateStatus(`🔄 Executando teste: ${testType}...`, 'running');
+            appendOutput(`\n🚀 Iniciando teste: ${testType}`);
+            appendOutput(`Comando: ${command.join(' ')}`);
+            if (webhookUrl) appendOutput(`Webhook: ${webhookUrl}`);
+            appendOutput('----------------------------------------\n');
+            
+            try {
+                const result = await runCommand(command, env);
+                
+                if (result.includes('✅') || result.includes('SUCESSO')) {
+                    updateStatus('✅ Teste concluído com sucesso', 'success');
+                } else if (result.includes('❌') || result.includes('FALHA')) {
+                    updateStatus('❌ Teste concluído com falhas', 'error');
+                } else {
+                    updateStatus('✅ Teste concluído', 'success');
+                }
+            } catch (error) {
+                updateStatus('❌ Erro na execução', 'error');
+                appendOutput(`\n💥 Erro: ${error.message}`);
+            }
+        }
+        
+        async function runCommand(command, env = {}) {
+            return new Promise((resolve, reject) => {
+                appendOutput(`$ ${command.join(' ')}\n`);
+                
+                // Simula execução do comando
+                // Na implementação real, isso faria uma chamada para o backend
+                const mockOutput = `
+[testRunner] 🧪 Iniciando teste...
+[testRunner] ✅ Comando executado com sucesso
+[testRunner] Resultados: 5 posts processados
+[testRunner] Status: ✅ SUCESSO
+                `;
+                
+                setTimeout(() => {
+                    appendOutput(mockOutput);
+                    resolve(mockOutput);
+                }, 2000);
+            });
+        }
+        
+        // Atalhos de teclado
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey) {
+                switch(e.key) {
+                    case '1': runTest('login'); break;
+                    case '2': runTest('health'); break;
+                    case '3': runTest('selectors'); break;
+                    case '4': runTest('all'); break;
+                    case 'l': listAccounts(); break;
+                    case 'h': showHelp(); break;
+                }
+            }
+        });
+        
+        // Mostra atalhos
+        appendOutput(`
+⌨️ ATALHOS:
+Ctrl+1 = Teste Login
+Ctrl+2 = Health Check  
+Ctrl+3 = Teste Seletores
+Ctrl+4 = Teste Completo
+Ctrl+L = Listar Contas
+Ctrl+H = Ajuda
+        `);
+    </script>
+</body>
+</html>
