@@ -8,18 +8,17 @@ export const signIn  = (e: string, p: string) =>
   supabaseAnon.auth.signInWithPassword({ email: e, password: p })
 
 
-export const signWithGoogle = async (redirect?: string) => {
+export const signWithGoogle = async () => {
   try {
-    const options: { redirectTo?: string, queryParams?: { [key: string]: string } } = {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+    const options = {
+      redirectTo: `${backendUrl}/api/auth/callback`,
       queryParams: {
-        response_mode: 'query', // Força o envio como query parameter
+        response_mode: 'query',
         access_type: 'offline',
         prompt: 'consent',
       }
     };
-    if (redirect) {
-      options.redirectTo = redirect;
-    }
 
     return await supabaseAnon.auth.signInWithOAuth({
       provider: 'google',

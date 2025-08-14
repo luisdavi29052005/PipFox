@@ -1,17 +1,17 @@
 import { Router } from 'express'
 import { signUp, signIn, signWithGoogle, sendReset, deleteUser } from '../../services/auth.service'
 import { requireAuth } from '../../middleware/requireAuth'
-import { supabase } from '../../services/supabaseClient'
+import { supabase, supabaseAnon } from '../../services/supabaseClient'
 
 const COOKIE = {
   name: 'auth',
   opts: {
     httpOnly: true,
-    sameSite: 'lax', // Mantido, mas se não funcionar, tente 'none'
+    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'none',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    // O domínio precisa ser especificado em desenvolvimento para funcionar entre portas
-    domain: process.env.NODE_ENV !== 'production' ? 'localhost' : undefined,
+    // No Replit, não especificar domínio para permitir cookies cross-origin
+    domain: undefined,
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }
@@ -84,17 +84,74 @@ router.get('/google', async (req, res) => {
 
 router.get('/callback', async (req, res) => {
   try {
-    const { access_token, refresh_token } = req.query
+    const { code, error, error_description } = req.query
 
-    if (access_token) {
-      res.cookie(COOKIE.name, access_token as string, COOKIE.opts)
-      res.redirect('/dashboard');
+    if (error) {
+      console.error('OAuth error:', error, error_description)
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=oauth_failed`)
+    }
+
+    if (code) {
+      // Trocar o código por uma sessão no Supabase
+      const { data, error: sessionError } = await supabaseAnon.auth.exchangeCodeForSession(code as string)
+      
+      if (sessionError || !data.session) {
+        console.error('Session exchange error:', sessionError)
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=session_failed`)
+      }
+
+      // Verificar se o usuário existe
+      if (!data.user) {
+        console.error('No user data received')
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=no_user`)
+      }
+
+      // Configurar o cookie com o token de acesso
+      res.cookie(COOKIE.name, data.session.access_token, COOKIE.opts)
+      
+      // Criar plano gratuito se é um novo usuário
+      if (data.user?.id) {
+        try {
+          const { data: freePlan, error: planError } = await supabase
+            .from('plans')
+            .select('*')
+            .eq('name', 'Free')
+            .single();
+
+          if (freePlan && !planError) {
+            // Verificar se já tem subscription
+            const { data: existingSub } = await supabase
+              .from('subscriptions')
+              .select('*')
+              .eq('user_id', data.user.id)
+              .single();
+
+            if (!existingSub) {
+              await supabase
+                .from('subscriptions')
+                .insert({
+                  user_id: data.user.id,
+                  plan_id: freePlan.id,
+                  status: 'active',
+                  start_date: new Date().toISOString()
+                });
+              console.log(`Assigned Free plan to user ${data.user.id}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error assigning Free plan:', error);
+          // Não falha o login se não conseguir atribuir o plano
+        }
+      }
+      
+      // Redirecionar para o frontend
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`)
     } else {
-      res.redirect('/login?error=oauth_failed')
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=no_code`)
     }
   } catch (err) {
     console.error('OAuth callback error:', err)
-    res.redirect('/login?error=oauth_failed')
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=oauth_failed`)
   }
 })
 
