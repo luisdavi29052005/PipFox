@@ -10,6 +10,7 @@ import Plans from './pages/Plans'
 import CreateWorkflow from './pages/CreateWorkflow'
 import WorkflowEditor from './pages/WorkflowEditor'
 import ProtectedRoute from './routes/ProtectedRoute'
+import OAuthCallback from './components/auth/OAuthCallback'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Dashboard />
           </ProtectedRoute>
         } />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/workflows" element={
           <ProtectedRoute>
             <Workflows />

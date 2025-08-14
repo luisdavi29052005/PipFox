@@ -7,11 +7,17 @@ export const signUp  = (e: string, p: string) =>
 export const signIn  = (e: string, p: string) =>
   supabaseAnon.auth.signInWithPassword({ email: e, password: p })
 
-export const signWithGoogle = async (redirect: string) => {
+export const signWithGoogle = async () => {
   try {
     return await supabaseAnon.auth.signInWithOAuth({ 
       provider: 'google', 
-      options: { redirectTo: redirect } 
+      options: { 
+        redirectTo: `${process.env.PUBLIC_URL || 'http://localhost:5173'}/oauth/callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
+      } 
     })
   } catch (error) {
     console.error('Google OAuth service error:', error)
