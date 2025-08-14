@@ -1,17 +1,15 @@
 import { Router } from 'express'
 import { signUp, signIn, signWithGoogle, sendReset, deleteUser } from '../../services/auth.service'
 import { requireAuth } from '../../middleware/requireAuth'
-import { supabase, supabaseAnon } from '../../services/supabaseClient'
+import { supabase } from '../../services/supabaseClient'
 
 const COOKIE = {
   name: 'auth',
   opts: {
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'none',
+    sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    // No Replit, não especificar domínio para permitir cookies cross-origin
-    domain: undefined,
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }
@@ -69,8 +67,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/google', async (req, res) => {
   try {
-    // A URL de redirecionamento agora será a que está configurada no seu painel do Supabase
-    const { data, error } = await signWithGoogle() // CORRIGIDO
+    const { data, error } = await signWithGoogle(`${process.env.PUBLIC_URL}/api/auth/callback`)
     if (error) {
       console.error('Google OAuth error:', error)
       return res.status(500).json({ error: 'Failed to initialize Google OAuth' })
@@ -84,74 +81,17 @@ router.get('/google', async (req, res) => {
 
 router.get('/callback', async (req, res) => {
   try {
-    const { code, error, error_description } = req.query
+    const { access_token, refresh_token } = req.query
 
-    if (error) {
-      console.error('OAuth error:', error, error_description)
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=oauth_failed`)
-    }
-
-    if (code) {
-      // Trocar o código por uma sessão no Supabase
-      const { data, error: sessionError } = await supabaseAnon.auth.exchangeCodeForSession(code as string)
-      
-      if (sessionError || !data.session) {
-        console.error('Session exchange error:', sessionError)
-        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=session_failed`)
-      }
-
-      // Verificar se o usuário existe
-      if (!data.user) {
-        console.error('No user data received')
-        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=no_user`)
-      }
-
-      // Configurar o cookie com o token de acesso
-      res.cookie(COOKIE.name, data.session.access_token, COOKIE.opts)
-      
-      // Criar plano gratuito se é um novo usuário
-      if (data.user?.id) {
-        try {
-          const { data: freePlan, error: planError } = await supabase
-            .from('plans')
-            .select('*')
-            .eq('name', 'Free')
-            .single();
-
-          if (freePlan && !planError) {
-            // Verificar se já tem subscription
-            const { data: existingSub } = await supabase
-              .from('subscriptions')
-              .select('*')
-              .eq('user_id', data.user.id)
-              .single();
-
-            if (!existingSub) {
-              await supabase
-                .from('subscriptions')
-                .insert({
-                  user_id: data.user.id,
-                  plan_id: freePlan.id,
-                  status: 'active',
-                  start_date: new Date().toISOString()
-                });
-              console.log(`Assigned Free plan to user ${data.user.id}`);
-            }
-          }
-        } catch (error) {
-          console.error('Error assigning Free plan:', error);
-          // Não falha o login se não conseguir atribuir o plano
-        }
-      }
-      
-      // Redirecionar para o frontend
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`)
+    if (access_token) {
+      res.cookie(COOKIE.name, access_token as string, COOKIE.opts)
+      res.redirect('/app')
     } else {
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=no_code`)
+      res.redirect('/login?error=oauth_failed')
     }
   } catch (err) {
     console.error('OAuth callback error:', err)
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=oauth_failed`)
+    res.redirect('/login?error=oauth_failed')
   }
 })
 
