@@ -7,9 +7,11 @@ const COOKIE = {
   name: 'auth',
   opts: {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'lax', // Mantido, mas se não funcionar, tente 'none'
     secure: process.env.NODE_ENV === 'production',
     path: '/',
+    // O domínio precisa ser especificado em desenvolvimento para funcionar entre portas
+    domain: process.env.NODE_ENV !== 'production' ? 'localhost' : undefined,
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }
@@ -67,7 +69,8 @@ router.post('/login', async (req, res) => {
 
 router.get('/google', async (req, res) => {
   try {
-    const { data, error } = await signWithGoogle(`${process.env.PUBLIC_URL}/api/auth/callback`)
+    // A URL de redirecionamento agora será a que está configurada no seu painel do Supabase
+    const { data, error } = await signWithGoogle() // CORRIGIDO
     if (error) {
       console.error('Google OAuth error:', error)
       return res.status(500).json({ error: 'Failed to initialize Google OAuth' })
@@ -85,7 +88,7 @@ router.get('/callback', async (req, res) => {
 
     if (access_token) {
       res.cookie(COOKIE.name, access_token as string, COOKIE.opts)
-      res.redirect('/app')
+      res.redirect('/dashboard');
     } else {
       res.redirect('/login?error=oauth_failed')
     }
