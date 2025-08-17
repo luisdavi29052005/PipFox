@@ -375,24 +375,330 @@ export async function testSelectors(options: SelectorTestOptions) {
         continue;
       }
 
-      // Estratégia melhorada: procurar por todos os articles e depois filtrar por aria-posinset
+      // Primeiro, verificar se há elementos com aria-posinset na página
+      const allPosinsetElements = await page.locator('div[aria-posinset]').all();
+      console.log(`[selectorTester] Encontrados ${allPosinsetElements.length} elementos com aria-posinset na página (URL: ${currentUrl})`);
+
+      if (allPosinsetElements.length > 0) {
+        console.log(`[selectorTester] ✅ POSINSET ENCONTRADO! Ficando parado neste post para procurar timestamp.`);
+
+        // Pegar o primeiro elemento com posinset
+        const firstPosinsetElement = allPosinsetElements[0];
+        const posinsetValue = await firstPosinsetElement.getAttribute('aria-posinset');
+
+        console.log(`[selectorTester] Processando elemento com aria-posinset="${posinsetValue}"`);
+
+        // Verificar se já foi processado
+        if (seen.has(posinsetValue)) {
+          console.log(`[selectorTester] Elemento com aria-posinset ${posinsetValue} já processado - prosseguindo com próximo scroll`);
+          // Não continuar procurando, fazer scroll para encontrar próximo post
+        } else {
+          // FICAR PARADO NESTE POST e tentar múltiplas estratégias
+
+          // 1. Scroll para o elemento ficar bem visível
+          await firstPosinsetElement.scrollIntoViewIfNeeded();
+          await sleep(800);
+
+          // 2. Aguardar que o elemento esteja completamente carregado
+          await firstPosinsetElement.waitFor({ state: 'visible', timeout: 5000 });
+
+          console.log(`[selectorTester] 🔍 MODO INTENSIVO: Buscando timestamp no post parado...`);
+
+          let tsLink = null;
+          let href = null;
+          let attemptCount = 0;
+          const maxAttempts = 5;
+
+          // Tentar múltiplas vezes com diferentes estratégias
+          while (!tsLink && attemptCount < maxAttempts) {
+            attemptCount++;
+            console.log(`[selectorTester] Tentativa ${attemptCount}/${maxAttempts} de encontrar timestamp...`);
+
+            // Estratégias para encontrar timestamp - ordem de prioridade
+            const timestampStrategies = [
+              // Estratégia 1: Links próximos ao autor
+              {
+                name: 'autor-timestamp',
+                selectors: [
+                  'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]:has(time)',
+                  'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]:has(abbr)',
+                  'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]:has(time)',
+                  'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]:has(abbr)'
+                ]
+              },
+              // Estratégia 2: Headers com timestamps
+              {
+                name: 'header-timestamp',
+                selectors: [
+                  'h2 ~ div a[href*="/posts/"]:has(time)',
+                  'h3 ~ div a[href*="/posts/"]:has(time)',
+                  'h4 ~ div a[href*="/posts/"]:has(time)',
+                  'h2 ~ div a[href*="/permalink/"]:has(time)',
+                  'h3 ~ div a[href*="/permalink/"]:has(time)',
+                  'h4 ~ div a[href*="/permalink/"]:has(time)'
+                ]
+              },
+              // Estratégia 3: Qualquer link com time
+              {
+                name: 'generic-time',
+                selectors: [
+                  'a[href*="/posts/"]:has(time[datetime])',
+                  'a[href*="/posts/"]:has(abbr[data-utime])',
+                  'a[href*="/permalink/"]:has(time[datetime])',
+                  'a[href*="/permalink/"]:has(abbr[data-utime])'
+                ]
+              },
+              // Estratégia 4: Busca por texto de timestamp
+              {
+                name: 'text-timestamp',
+                selectors: [
+                  'a[href*="/posts/"]',
+                  'a[href*="/permalink/"]'
+                ]
+              }
+            ];
+
+            for (const strategy of timestampStrategies) {
+              console.log(`[selectorTester] Testando estratégia: ${strategy.name} (${strategy.selectors.length} seletores)`);
+
+              for (let selectorIndex = 0; selectorIndex < strategy.selectors.length; selectorIndex++) {
+                const selector = strategy.selectors[selectorIndex];
+                console.log(`[selectorTester] Testando seletor ${selectorIndex + 1}/${strategy.selectors.length}: ${selector}`);
+
+                try {
+                  const linkLocators = await firstPosinsetElement.locator(selector).all();
+                  console.log(`[selectorTester] Encontrados ${linkLocators.length} elementos com o seletor`);
+
+                  for (const linkLocator of linkLocators) {
+                    if (await linkLocator.isVisible({ timeout: 500 }).catch(() => false)) {
+                      href = await linkLocator.getAttribute('href');
+                      const linkText = await linkLocator.textContent() || '';
+
+                      // Verificar se não está em um comentário
+                      const isInComment = await linkLocator.evaluate((el) => {
+                        return el.closest('[role="article"][aria-label*="Comment"]') !== null ||
+                               el.closest('[aria-label*="Comentário"]') !== null ||
+                               el.closest('[data-testid*="comment"]') !== null;
+                      });
+
+                      // Para estratégia de texto, verificar se é realmente um timestamp
+                      if (strategy.name === 'text-timestamp') {
+                        const isTimestampText = /^\d+\s*(h|min|m|s|seg|hora|dia)$/i.test(linkText.trim()) ||
+                                               /^\d+\s*(h|min|m|s|seg|hora|dia|ago|atrás)/i.test(linkText.trim()) ||
+                                               /^\d+\s*(de janeiro|de fevereiro|de março|de abril|de maio|de junho|de julho|de agosto|de setembro|de outubro|de novembro|de dezembro)/i.test(linkText.trim());
+
+                        if (!isTimestampText) {
+                          continue;
+                        }
+                      }
+
+                      if (href && !isInComment && (href.includes('/posts/') || href.includes('/permalink/'))) {
+                        console.log(`[selectorTester] ✅ Timestamp encontrado (${strategy.name})! href: ${href}, texto: "${linkText}"`);
+                        tsLink = linkLocator;
+                        break;
+                      }
+                    }
+                  }
+
+                  if (tsLink) break;
+                } catch (e) {
+                  console.log(`[selectorTester] Erro na estratégia ${strategy.name} com seletor ${selector}:`, e.message);
+                  continue;
+                }
+              }
+
+              if (tsLink) break;
+            }
+
+            // Se não encontrou timestamp nesta tentativa
+            if (!tsLink) {
+              if (attemptCount < maxAttempts) {
+                console.log(`[selectorTester] Tentativa ${attemptCount} falhada. Fazendo micro-scroll para carregar mais elementos...`);
+
+                // Micro-scroll para cima e para baixo para garantir carregamento
+                await page.evaluate(() => window.scrollBy(0, -100)); // Pequeno scroll para cima
+                await sleep(400);
+                await page.evaluate(() => window.scrollBy(0, 150)); // Pequeno scroll para baixo
+                await sleep(400);
+
+                // Garantir que o elemento ainda está visível
+                await firstPosinsetElement.scrollIntoViewIfNeeded();
+                await sleep(500);
+              } else {
+                console.log(`[selectorTester] ❌ Esgotadas ${maxAttempts} tentativas. Não encontrou timestamp no post com posinset ${posinsetValue}`);
+
+                // Debug detalhado no final
+                try {
+                  console.log(`[selectorTester] 🔍 DEBUG FINAL - Analisando todos os links no post...`);
+                  const allLinks = await firstPosinsetElement.locator('a').all();
+                  console.log(`[selectorTester] Total de ${allLinks.length} links encontrados no post`);
+
+                  for (let i = 0; i < Math.min(allLinks.length, 10); i++) {
+                    try {
+                      const link = allLinks[i];
+                      const linkHref = await link.getAttribute('href') || '';
+                      const linkText = await link.textContent() || '';
+                      const hasTime = await link.locator('time, abbr').count() > 0;
+
+                      console.log(`[selectorTester] Link ${i + 1}: "${linkText.trim().substring(0, 30)}" -> ${linkHref.substring(0, 80)}... (hasTime: ${hasTime})`);
+                    } catch (e) {
+                      continue;
+                    }
+                  }
+                } catch (e) {
+                  console.log(`[selectorTester] Erro no debug final:`, e.message);
+                }
+              }
+            }
+          }
+
+          if (!tsLink || !href) {
+            console.log(`[selectorTester] ❌ FALHA FINAL: Não conseguiu encontrar timestamp após ${maxAttempts} tentativas. Marcando como processado e continuando.`);
+            // Marcar como processado para não ficar em loop
+            seen.add(posinsetValue);
+            // Não parar a execução, continuar procurando outros posts
+          } else {
+            // Limpar comment_id se presente
+            if (href.includes('comment_id')) {
+              href = href.split('?comment_id=')[0].split('&comment_id=')[0];
+              console.log(`[selectorTester] comment_id removido, href limpo: ${href}`);
+            }
+
+            const postId = extractPostId(href);
+
+            // Marcar como processado ANTES de processar
+            seen.add(posinsetValue);
+
+            console.log(`[selectorTester] Processando post ${processed + 1}/${maxPosts}: ${postId} (aria-posinset: ${posinsetValue})`);
+
+            try {
+              // Promise para detectar se abre modal ou navega para nova página
+              const modalPromise = page.locator('div[role="dialog"][aria-modal="true"]').waitFor({
+                state: 'visible',
+                timeout: 10000
+              }).then(() => 'modal' as const).catch(() => null);
+
+              const urlPromise = page.waitForURL(/\/posts\/|\/permalink\//, {
+                timeout: 10000
+              }).then(() => 'page' as const).catch(() => null);
+
+              // Clica no timestamp
+              console.log(`[selectorTester] Clicando no timestamp do post ${postId}`);
+
+              // Garantir que o elemento está visível e clicável
+              await tsLink.scrollIntoViewIfNeeded();
+              await tsLink.waitFor({ state: 'visible', timeout: 5000 });
+
+              // Tentar clique com delay
+              await tsLink.click({ delay: rand(50, 150), timeout: 10000 });
+
+              // Aguarda modal ou navegação
+              const mode = await Promise.race([modalPromise, urlPromise, sleep(3000).then(() => null)]);
+
+              if (!mode) {
+                console.warn(`[selectorTester] Post ${postId}: Timeout - nem modal nem navegação detectada`);
+              } else {
+                console.log(`[selectorTester] Post ${postId}: Aberto via ${mode}`);
+                await sleep(1000); // Aguarda carregamento
+
+                // Extrai dados do post
+                const data = await parseModal(page);
+                const payload = { ...data, postId: data.postId || postId, groupUrl };
+
+                console.log(`[selectorTester] Dados extraídos:`, {
+                  postId: payload.postId,
+                  author: payload.authorName,
+                  textLength: payload.text?.length || 0,
+                  images: payload.imageUrls.length
+                });
+
+                if (webhookUrl) {
+                  try {
+                    console.log(`[selectorTester] Enviando dados para n8n...`);
+                    const n8nResponse = await processPostWithN8n(payload, webhookUrl);
+
+                    if (n8nResponse.shouldComment && n8nResponse.commentText) {
+                      console.log(`[selectorTester] N8n gerou resposta - comentando no post...`);
+
+                      const commentResult = await postComment({
+                        page,
+                        postUrl: payload.permalink || undefined,
+                        message: n8nResponse.commentText,
+                        timeoutMs: 10000
+                      });
+
+                      if (commentResult.ok) {
+                        console.log(`[selectorTester] Comentário postado com sucesso!`);
+                      } else {
+                        console.warn(`[selectorTester] Erro ao postar comentário: ${commentResult.error}`);
+                      }
+                    } else {
+                      console.log(`[selectorTester] N8n decidiu não comentar neste post`);
+                    }
+
+                    console.log(`[selectorTester] Processamento do post concluído`);
+
+                  } catch (err) {
+                    console.warn(`[selectorTester] Erro no processamento n8n para post ${payload.postId}:`, (err as Error).message);
+                  }
+                }
+
+                processed++;
+                console.log(`[selectorTester] Post processado com sucesso!`);
+
+                // Fechar modal ou voltar à página anterior
+                if (mode === 'modal') {
+                  await closePostModal(page);
+                  await sleep(500);
+                } else {
+                  await page.goBack({ waitUntil: 'domcontentloaded' });
+                  await ensureLoggedIn(page, groupUrl);
+                }
+
+                // PARAR após processar o post com posinset
+                shouldStop = true;
+                console.log(`[selectorTester] ✅ Finalizado após processar post com posinset`)
+                console.log(`[selectorTester] ✅ Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`)
+                break;
+              }
+            } catch (e) {
+              console.warn(`[selectorTester] Erro ao processar post com posinset ${postId}:`, (e as Error).message);
+
+              // Tenta voltar para a página do grupo se navegou para fora
+              try {
+                const currentUrl = page.url();
+                if (!currentUrl.includes('/groups/' + groupUrl.split('/groups/')[1]?.split('/')[0])) {
+                  console.log(`[selectorTester] Voltando para a página do grupo de: ${currentUrl}`);
+                  await page.goto(groupUrl, { waitUntil: 'domcontentloaded' });
+                  await ensureLoggedIn(page, groupUrl);
+                }
+              } catch (navError) {
+                console.error(`[selectorTester] Erro fatal de navegação:`, navError);
+                shouldStop = true;
+                break;
+              }
+            }
+
+            await sleep(rand(...pauseBetweenPostsMs));
+          }
+        }
+
+        // Se processou o post com posinset, parar aqui
+        if (shouldStop) {
+          break;
+        }
+      }
+
+      // Se não encontrou posinset, procurar por articles normalmente (código de fallback)
       const feed = page.locator('div[role="feed"]').first();
       const allArticles = feed.locator('div[role="article"]');
       const articleCount = await allArticles.count();
 
-      console.log(`[selectorTester] Encontrados ${articleCount} articles na página (URL: ${currentUrl})`);
+      console.log(`[selectorTester] Encontrados ${articleCount} articles na página`);
 
-      // Filtrar apenas articles que têm aria-posinset
+      // Código original para compatibilidade, mas não será usado se houver posinset
       const articlesWithPosinset = [];
-      for (let i = 0; i < articleCount; i++) {
-        const article = allArticles.nth(i);
-        const posinset = await article.getAttribute('aria-posinset');
-        if (posinset) {
-          articlesWithPosinset.push({ article, posinset });
-        }
-      }
-
-      console.log(`[selectorTester] Encontrados ${articlesWithPosinset.length} articles com aria-posinset na página`);
+      console.log(`[selectorTester] Nenhum elemento com posinset - usando fallback de articles`);
 
       let navigatedAway = false;
       let processedInThisRound = 0;
@@ -697,25 +1003,20 @@ export async function testSelectors(options: SelectorTestOptions) {
         continue;
       }
 
-      // Se não processou nenhum post nesta rodada, faz scroll
+      // Se não processou nenhum post nesta rodada e não encontrou posinset, faz scroll
       if (processedInThisRound === 0) {
         scrolls++;
-        console.log(`[selectorTester] Scroll ${scrolls}/${maxScrolls} (nenhum post processado nesta rodada)`);
+        console.log(`[selectorTester] Scroll ${scrolls}/${maxScrolls} - procurando por elementos com posinset...`);
 
-        // Se não há posts com aria-posinset, mostrar debug
-        if (articlesWithPosinset.length === 0) {
-          console.log(`[selectorTester] ⚠️ Nenhum post com aria-posinset encontrado. Verificando se há posts no feed...`);
+        // Fazer scroll mais suave para não passar do elemento com posinset
+        await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.5)).catch(()=>{});
+        await sleep(rand(800, 1200));
 
-          const feedChildren = await feed.locator('> div').count();
-          console.log(`[selectorTester] Feed tem ${feedChildren} divs filhos diretos`);
-
-          // Verificar se há algum div com aria-posinset em qualquer lugar
-          const anyPosinset = await page.locator('div[aria-posinset]').count();
-          console.log(`[selectorTester] Total de divs com aria-posinset na página: ${anyPosinset}`);
+        // Verificar novamente se apareceu algum posinset após o scroll
+        const newPosinsetCount = await page.locator('div[aria-posinset]').count();
+        if (newPosinsetCount > 0) {
+          console.log(`[selectorTester] ✅ Posinset detectado após scroll! Próxima iteração irá parar.`);
         }
-
-        await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.9)).catch(()=>{});
-        await sleep(rand(1200, 2000));
       }
     }
 
