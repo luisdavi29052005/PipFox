@@ -1,6 +1,7 @@
-
 import { chromium, BrowserContext, Page, Locator } from 'playwright'
 import { openContextForAccount } from '../../../src/core/automations/facebook/session/context'
+import { processPostWithN8n } from './helpers/n8nIntegration'
+import { postComment } from '../../../src/core/automations/facebook/actions/postComment'
 
 // ===== Helpers =====
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -8,8 +9,12 @@ const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min
 
 function extractPostId(href: string | null): string | null {
   if (!href) return null
-  const m = href.match(/\/posts\/(\d+)/)
-  return m ? m[1] : href
+
+  // Remove comment_id se presente na URL
+  const cleanHref = href.split('?comment_id=')[0].split('&comment_id=')[0]
+
+  const m = cleanHref.match(/\/posts\/(\d+)|\/permalink\/(\d+)/)
+  return m ? (m[1] || m[2]) : cleanHref
 }
 
 async function closePostModal(page: Page) {
@@ -53,19 +58,19 @@ async function ensureLoggedIn(page: Page, groupUrl: string) {
   const loginHints = page.locator(
     'form[action*="login"], input[name="email"], input[id="email"], div[role="dialog"] input[name="email"]',
   );
-  
+
   if (await loginHints.first().isVisible({ timeout: 5000 }).catch(() => false)) {
     console.log('>> Faça o login e clique em qualquer botão "Continuar" ou "Agora não" que aparecer. O script vai esperar...');
-    
+
     // Espera a URL ser a do grupo
     await page.waitForURL(
-        (url) => url.href.startsWith(groupUrl), 
+        (url) => url.href.startsWith(groupUrl),
         { timeout: 180000, waitUntil: 'domcontentloaded' }
     );
 
     // Espera o feed carregar
     await page.locator('div[role="feed"]').first().waitFor({ state: 'visible', timeout: 30000 });
-    
+
     console.log('>> Login completo e feed carregado. Continuando a execução.');
     return;
   }
@@ -89,16 +94,16 @@ export type PostData = {
 async function parseModal(page: Page): Promise<PostData> {
   // Aguarda um pouco para garantir que o modal/página carregou
   await sleep(1000);
-  
+
   return await page.evaluate(() => {
     // Tenta encontrar o modal primeiro, senão usa o body (para posts que abrem em nova página)
     const dialog = document.querySelector('div[role="dialog"][aria-modal="true"]') as HTMLElement | null;
     const container = dialog || document.body;
-    
+
     const pickText = (el: Element | null): string | null => {
       if (!el) return null;
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-        acceptNode: (n) => {
+        acceptNode: function(n) {
           const t = n.textContent?.trim() || '';
           return t.length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
         },
@@ -112,33 +117,73 @@ async function parseModal(page: Page): Promise<PostData> {
     // Encontra o article principal
     const article = container.querySelector('div[role="article"]') || container;
 
-    // Busca permalink usando várias estratégias
+    // Busca permalink usando estratégias melhoradas, priorizando timestamps do autor
     const timestampSelectors = [
-      'a[href*="/groups/"][href*="/posts/"]:has(time)',
-      'a[href*="/posts/"]:has(time)',
-      'a:has(time[datetime])',
-      'a:has(abbr[data-utime])',
+      // Estratégia 1: Timestamp no header do post próximo ao autor (máxima prioridade)
+      'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]:has(time)',
+      'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]:has(abbr)',
+      'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]:has(time)',
+      'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]:has(abbr)',
+
+      // Estratégia 2: Links próximos aos cabeçalhos de post
+      'h2 ~ div a[href*="/posts/"]:has(time)',
+      'h3 ~ div a[href*="/posts/"]:has(time)',
+      'h4 ~ div a[href*="/posts/"]:has(time)',
+      'h2 ~ div a[href*="/permalink/"]:has(time)',
+      'h3 ~ div a[href*="/permalink/"]:has(time)',
+      'h4 ~ div a[href*="/permalink/"]:has(time)',
+
+      // Estratégia 3: Qualquer link com time/abbr que aponte para posts
+      'a[href*="/posts/"]:has(time[datetime])',
+      'a[href*="/posts/"]:has(abbr[data-utime])',
+      'a[href*="/permalink/"]:has(time[datetime])',
+      'a[href*="/permalink/"]:has(abbr[data-utime])',
+
+      // Estratégia 4: Elementos time/abbr standalone (fallback)
       'time[datetime]',
       'abbr[data-utime]'
     ];
 
     let permalink = null;
     let timeEl = null;
+    let bestPriority = 999;
 
-    for (const selector of timestampSelectors) {
+    for (let i = 0; i < timestampSelectors.length; i++) {
+      const selector = timestampSelectors[i];
       const el = container.querySelector(selector);
-      if (el) {
+
+      if (el && i < bestPriority) {
+        let linkEl = null;
+        let currentTimeEl = null;
+
         if (el.tagName === 'A') {
-          permalink = (el as HTMLAnchorElement).href;
-          timeEl = el.querySelector('time, abbr');
-          break;
+          linkEl = el as HTMLAnchorElement;
+          currentTimeEl = el.querySelector('time, abbr') || el;
         } else if (el.tagName === 'TIME' || el.tagName === 'ABBR') {
-          timeEl = el;
-          const parentLink = el.closest('a');
-          if (parentLink) {
-            permalink = parentLink.href;
+          currentTimeEl = el;
+          linkEl = el.closest('a') as HTMLAnchorElement;
+        }
+
+        if (linkEl && linkEl.href) {
+          // Verificar se não está em um comentário
+          const isInComment = el.closest('[role="article"][aria-label*="Comment"]') ||
+                             el.closest('[aria-label*="Comentário"]') ||
+                             el.closest('[data-testid*="comment"]');
+
+          // Se não está em comentário ou se ainda não temos um permalink melhor
+          if (!isInComment) {
+            permalink = linkEl.href;
+            timeEl = currentTimeEl;
+            bestPriority = i;
+            console.log(`[parseModal] Timestamp encontrado (prioridade ${i}): ${permalink}`);
+            break; // Para na primeira estratégia que encontrar um timestamp do post principal
+          } else if (!permalink) {
+            // Se está em comentário mas ainda não temos nada, usar como fallback
+            permalink = linkEl.href;
+            timeEl = currentTimeEl;
+            bestPriority = i;
+            console.log(`[parseModal] Timestamp de comentário encontrado como fallback: ${permalink}`);
           }
-          break;
         }
       }
     }
@@ -196,11 +241,11 @@ async function parseModal(page: Page): Promise<PostData> {
     const images = Array.from(new Set(
       imgEls
         .map(i => i.src)
-        .filter(src => 
-          src && 
-          !src.includes('emoji') && 
-          !src.includes('static') && 
-          !src.includes('profile') && 
+        .filter(src =>
+          src &&
+          !src.includes('emoji') &&
+          !src.includes('static') &&
+          !src.includes('profile') &&
           !src.includes('transparent') &&
           (src.includes('scontent') || src.includes('fbcdn'))
         )
@@ -243,7 +288,7 @@ export interface SelectorTestOptions {
 if (require.main === module) {
   async function main() {
     const { getTestIds } = await import('./helpers/getTestIds')
-    
+
     let userId = process.argv[2]
     let accountId = process.argv[3]
     const groupUrl = process.argv[4] || 'https://www.facebook.com/groups/940840924057399'
@@ -318,84 +363,203 @@ export async function testSelectors(options: SelectorTestOptions) {
     const seen = new Set<string>()
     let processed = 0
     let scrolls = 0
+    let shouldStop = false
 
-    while (processed < maxPosts && scrolls < maxScrolls) {
-      const articles = page.locator('div[role="feed"]').first().locator('div[role="article"]')
-      const count = await articles.count()
+    while (processed < maxPosts && scrolls < maxScrolls && !shouldStop) {
+      // Verificar se estamos na página correta
+      const currentUrl = page.url();
+      if (!currentUrl.includes('/groups/')) {
+        console.log(`[selectorTester] ⚠️ Não está na página do grupo. URL atual: ${currentUrl}`);
+        await page.goto(groupUrl, { waitUntil: 'domcontentloaded' });
+        await ensureLoggedIn(page, groupUrl);
+        continue;
+      }
 
-      console.log(`[selectorTester] Encontrados ${count} articles na página`)
+      // Estratégia melhorada: procurar por todos os articles e depois filtrar por aria-posinset
+      const feed = page.locator('div[role="feed"]').first();
+      const allArticles = feed.locator('div[role="article"]');
+      const articleCount = await allArticles.count();
+
+      console.log(`[selectorTester] Encontrados ${articleCount} articles na página (URL: ${currentUrl})`);
+
+      // Filtrar apenas articles que têm aria-posinset
+      const articlesWithPosinset = [];
+      for (let i = 0; i < articleCount; i++) {
+        const article = allArticles.nth(i);
+        const posinset = await article.getAttribute('aria-posinset');
+        if (posinset) {
+          articlesWithPosinset.push({ article, posinset });
+        }
+      }
+
+      console.log(`[selectorTester] Encontrados ${articlesWithPosinset.length} articles com aria-posinset na página`);
 
       let navigatedAway = false;
       let processedInThisRound = 0;
 
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < articlesWithPosinset.length; i++) {
         if (processed >= maxPosts) break
 
-        const post = articles.nth(i)
-        
-        // Estratégia otimizada para encontrar timestamp links baseada na estrutura real do Facebook
-        const tsSelectors = [
-          // Estratégia 1: Link direto com href de post
-          'a[href*="/posts/"][role="link"]',
-          'a[href*="/permalink/"][role="link"]',
-          
-          // Estratégia 2: Links que contêm elementos de tempo (estrutura observada)
-          'a[role="link"]:has(span span b)',  // Como "1h" dividido em <b>1</b><b>h</b>
-          'a[href*="/posts/"]:has(b)',
-          
-          // Estratégia 3: Seletores tradicionais
-          'a[href*="/groups/"][href*="/posts/"]:has(time)',
-          'a[href*="/posts/"]:has(time)', 
-          'a:has(time)',
-          'a:has(abbr[data-utime])'
-        ];
+        const { article: post, posinset: ariaPosinset } = articlesWithPosinset[i];
 
+        // Verificar se já foi processado
+        if (seen.has(ariaPosinset)) {
+          console.log(`[selectorTester] Post ${i + 1}: aria-posinset ${ariaPosinset} já processado`);
+          continue;
+        }
+
+        // Verificar se o post está visível
+        const isVisible = await post.isVisible();
+        if (!isVisible) {
+          console.log(`[selectorTester] Post ${i + 1}: aria-posinset ${ariaPosinset} não está visível`);
+          continue;
+        }
+
+        // Buscar timestamp do post principal usando estratégias melhoradas
         let tsLink = null;
         let href = null;
 
-        for (const selector of tsSelectors) {
-          try {
+        console.log(`[selectorTester] Buscando timestamp no post ${i + 1} (aria-posinset: ${ariaPosinset})...`);
+
+        // Estratégia 1: Timestamp próximo ao cabeçalho do post (prioridade máxima)
+        try {
+          const headerTimestampSelectors = [
+            'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]:has(time)',
+            'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]:has(abbr)',
+            'h2 ~ div a[href*="/posts/"]:has(time)',
+            'h3 ~ div a[href*="/posts/"]:has(time)',
+            'h4 ~ div a[href*="/posts/"]:has(time)',
+          ];
+
+          for (const selector of headerTimestampSelectors) {
             const linkLocator = post.locator(selector).first();
-            if (await linkLocator.count() > 0) {
-              tsLink = linkLocator;
-              href = await tsLink.getAttribute('href');
-              
-              // Validação mais robusta do href
-              if (href && (
-                href.includes('/posts/') || 
-                href.includes('/permalink/') ||
-                href.includes('story_fbid=') ||
-                href.match(/facebook\.com\/.*\/\d+/) // Pattern genérico para posts
-              )) {
-                // Teste adicional: verificar se o link contém texto de tempo
-                const linkText = await tsLink.textContent().catch(() => '');
-                const hasTimePattern = /\d+\s*(h|min|dia|day|hora|m|s|seg|second|minute|hour)/.test(linkText || '');
-                
-                if (hasTimePattern || selector.includes('/posts/')) {
-                  console.log(`[selectorTester] Timestamp encontrado via: ${selector}, href: ${href}, texto: "${linkText}"`);
+            if (await linkLocator.isVisible({ timeout: 1000 }).catch(() => false)) {
+              href = await linkLocator.getAttribute('href');
+              const linkText = await linkLocator.textContent() || '';
+
+              // Verificar se não está em um comentário
+              const isInComment = await linkLocator.evaluate((el) => {
+                return el.closest('[role="article"][aria-label*="Comment"]') !== null ||
+                       el.closest('[aria-label*="Comentário"]') !== null;
+              });
+
+              if (href && !isInComment) {
+                console.log(`[selectorTester] ✅ Timestamp do cabeçalho encontrado! href: ${href}, texto: "${linkText}"`);
+                tsLink = linkLocator;
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`[selectorTester] Erro na estratégia 1 (cabeçalho):`, e);
+        }
+
+        // Estratégia 2: Links com time ou abbr que não estão em comentários
+        if (!tsLink) {
+          try {
+            const timeElements = await post.locator('a:has(time[datetime]), a:has(abbr[data-utime])').all();
+
+            for (const linkLocator of timeElements) {
+              try {
+                href = await linkLocator.getAttribute('href');
+                const linkText = await linkLocator.textContent() || '';
+
+                // Verificar se o href aponta para um post
+                const isPostLink = href && (href.includes('/posts/') || href.includes('/permalink/'));
+
+                // Verificar se não está em um comentário
+                const isInComment = await linkLocator.evaluate((el) => {
+                  return el.closest('[role="article"][aria-label*="Comment"]') !== null ||
+                         el.closest('[aria-label*="Comentário"]') !== null;
+                });
+
+                if (isPostLink && !isInComment) {
+                  console.log(`[selectorTester] ✅ Timestamp com time/abbr encontrado! href: ${href}, texto: "${linkText}"`);
+                  tsLink = linkLocator;
                   break;
                 }
+              } catch (e) {
+                continue;
               }
             }
           } catch (e) {
-            continue;
+            console.log(`[selectorTester] Erro na estratégia 2 (time/abbr):`, e);
+          }
+        }
+
+        // Estratégia 3: Procurar por links com padrão de timestamp (fallback)
+        if (!tsLink) {
+          try {
+            const postLinks = await post.locator('a[href*="/posts/"], a[href*="/permalink/"]').all();
+
+            for (const linkLocator of postLinks) {
+              try {
+                href = await linkLocator.getAttribute('href');
+                const linkText = await linkLocator.textContent() || '';
+
+                // Verificar se é um timestamp válido (contém números + unidade de tempo)
+                const isTimestamp = /^\d+\s*(h|min|m|s|dia|hora|seg)$/i.test(linkText.trim()) ||
+                                   /\d+\s*(h|min|m|s|dia|hora|seg|ago|atrás)/i.test(linkText.trim());
+
+                // Verificar se não está em um comentário
+                const isInComment = await linkLocator.evaluate((el) => {
+                  return el.closest('[role="article"][aria-label*="Comment"]') !== null ||
+                         el.closest('[aria-label*="Comentário"]') !== null;
+                });
+
+                if (href && isTimestamp && !isInComment) {
+                  console.log(`[selectorTester] ✅ Timestamp de fallback encontrado! href: ${href}, texto: "${linkText}"`);
+                  tsLink = linkLocator;
+                  break;
+                }
+              } catch (e) {
+                continue;
+              }
+            }
+          } catch (e) {
+            console.log(`[selectorTester] Erro na estratégia 3 (fallback):`, e);
           }
         }
 
         if (!tsLink || !href) {
-          console.log(`[selectorTester] Post ${i + 1}: Não encontrou timestamp clicável`);
+          console.log(`[selectorTester] ❌ Post ${i + 1} (aria-posinset: ${ariaPosinset}): Não encontrou timestamp clicável do autor.`);
+
+          // Debug detalhado
+          try {
+            const allLinks = await post.locator('a').all();
+            console.log(`[selectorTester] Debug: ${allLinks.length} links encontrados no post`);
+
+            for (let j = 0; j < Math.min(allLinks.length, 5); j++) {
+              try {
+                const link = allLinks[j];
+                const linkHref = await link.getAttribute('href') || '';
+                const linkText = await link.textContent() || '';
+                const hasTime = await link.locator('time, abbr').count() > 0;
+
+                console.log(`[selectorTester] Link ${j + 1}: "${linkText.trim()}" -> ${linkHref.substring(0, 50)}... (hasTime: ${hasTime})`);
+              } catch (e) {
+                continue;
+              }
+            }
+          } catch (e) {
+            console.log(`[selectorTester] Erro no debug:`, e);
+          }
+
           continue;
+        }
+
+        // Limpar comment_id se presente
+        if (href.includes('comment_id')) {
+          href = href.split('?comment_id=')[0].split('&comment_id=')[0];
+          console.log(`[selectorTester] comment_id removido, href limpo: ${href}`);
         }
 
         const postId = extractPostId(href);
 
-        if (!postId || seen.has(postId)) {
-          console.log(`[selectorTester] Post ${i + 1}: ID ${postId} já processado ou inválido`);
-          continue;
-        }
-        
-        seen.add(postId);
-        console.log(`[selectorTester] Processando post ${processed + 1}/${maxPosts}: ${postId}`);
+        // Marcar como processado ANTES de processar para evitar duplicatas
+        seen.add(ariaPosinset);
+
+        console.log(`[selectorTester] Processando post ${processed + 1}/${maxPosts}: ${postId} (aria-posinset: ${ariaPosinset})`);
 
         try {
           // Scroll para o post estar visível
@@ -403,18 +567,24 @@ export async function testSelectors(options: SelectorTestOptions) {
           await sleep(500);
 
           // Promise para detectar se abre modal ou navega para nova página
-          const modalPromise = page.locator('div[role="dialog"][aria-modal="true"]').waitFor({ 
-            state: 'visible', 
-            timeout: 10000 
+          const modalPromise = page.locator('div[role="dialog"][aria-modal="true"]').waitFor({
+            state: 'visible',
+            timeout: 10000
           }).then(() => 'modal' as const).catch(() => null);
-          
-          const urlPromise = page.waitForURL(/\/posts\/|\/permalink\//, { 
-            timeout: 10000 
+
+          const urlPromise = page.waitForURL(/\/posts\/|\/permalink\//, {
+            timeout: 10000
           }).then(() => 'page' as const).catch(() => null);
 
           // Clica no timestamp
           console.log(`[selectorTester] Clicando no timestamp do post ${postId}`);
-          await tsLink.click({ delay: rand(50, 150) });
+
+          // Garantir que o elemento está visível e clicável
+          await tsLink.scrollIntoViewIfNeeded();
+          await tsLink.waitFor({ state: 'visible', timeout: 5000 });
+
+          // Tentar clique com delay
+          await tsLink.click({ delay: rand(50, 150), timeout: 10000 });
 
           // Aguarda modal ou navegação
           const mode = await Promise.race([modalPromise, urlPromise, sleep(3000).then(() => null)]);
@@ -430,7 +600,7 @@ export async function testSelectors(options: SelectorTestOptions) {
           // Extrai dados do post
           const data = await parseModal(page);
           const payload = { ...data, postId: data.postId || postId, groupUrl };
-          
+
           console.log(`[selectorTester] Dados extraídos:`, {
             postId: payload.postId,
             author: payload.authorName,
@@ -440,40 +610,62 @@ export async function testSelectors(options: SelectorTestOptions) {
 
           if (webhookUrl) {
             try {
-              await sendToWebhook(payload, webhookUrl);
-              console.log(`[selectorTester] Dados enviados para webhook`);
+              console.log(`[selectorTester] Enviando dados para n8n...`);
+              const n8nResponse = await processPostWithN8n(payload, webhookUrl);
+
+              if (n8nResponse.shouldComment && n8nResponse.commentText) {
+                console.log(`[selectorTester] N8n gerou resposta - comentando no post...`);
+
+                const commentResult = await postComment({
+                  page,
+                  postUrl: payload.permalink || undefined,
+                  message: n8nResponse.commentText,
+                  timeoutMs: 10000
+                });
+
+                if (commentResult.ok) {
+                  console.log(`[selectorTester] Comentário postado com sucesso!`);
+                } else {
+                  console.warn(`[selectorTester] Erro ao postar comentário: ${commentResult.error}`);
+                }
+              } else {
+                console.log(`[selectorTester] N8n decidiu não comentar neste post`);
+              }
+
+              console.log(`[selectorTester] Processamento do post concluído`);
+
             } catch (err) {
-              console.warn(`[selectorTester] Erro no webhook para post ${payload.postId}:`, (err as Error).message);
+              console.warn(`[selectorTester] Erro no processamento n8n para post ${payload.postId}:`, (err as Error).message);
             }
           }
 
           processed++;
           processedInThisRound++;
-          
+
+          console.log(`[selectorTester] Post processado com sucesso!`);
+
           // Fechar modal ou voltar à página anterior
           if (mode === 'modal') {
             await closePostModal(page);
             await sleep(500);
-            
-            // Verifica se ainda está na página do grupo
-            if (!page.url().includes(groupUrl)) {
-              await page.goto(groupUrl, { waitUntil: 'domcontentloaded' });
-              await ensureLoggedIn(page, groupUrl);
-              navigatedAway = true;
-              break;
-            }
           } else {
             await page.goBack({ waitUntil: 'domcontentloaded' });
             await ensureLoggedIn(page, groupUrl);
-            navigatedAway = true;
-            break; 
           }
+
+          // PARAR IMEDIATAMENTE após processar um post
+          shouldStop = true;
+          console.log(`[selectorTester] ✅ Finalizado após processar 1 post com sucesso`)
+          console.log(`[selectorTester] ✅ Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`)
+          break;
         } catch (e) {
           console.warn(`[selectorTester] Erro ao processar post ${postId}:`, (e as Error).message);
-          
-          // Tenta voltar para a página do grupo
+
+          // Tenta voltar para a página do grupo se navegou para fora
           try {
-            if (!page.url().includes(groupUrl)) {
+            const currentUrl = page.url();
+            if (!currentUrl.includes('/groups/' + groupUrl.split('/groups/')[1]?.split('/')[0])) {
+              console.log(`[selectorTester] Voltando para a página do grupo de: ${currentUrl}`);
               await page.goto(groupUrl, { waitUntil: 'domcontentloaded' });
               await ensureLoggedIn(page, groupUrl);
               navigatedAway = true;
@@ -481,18 +673,25 @@ export async function testSelectors(options: SelectorTestOptions) {
             }
           } catch (navError) {
             console.error(`[selectorTester] Erro fatal de navegação:`, navError);
+            shouldStop = true;
             break;
           }
         }
-        
+
         await sleep(rand(...pauseBetweenPostsMs));
+
+        // Verificar se deve parar
+        if (shouldStop) {
+          console.log(`[selectorTester] Parando execução conforme solicitado`);
+          break;
+        }
       }
 
-      if (processed >= maxPosts) {
-        console.log(`[selectorTester] Meta de ${maxPosts} posts atingida`);
+      if (processed >= maxPosts || shouldStop) {
+        console.log(`[selectorTester] Meta de ${maxPosts} posts atingida ou execução interrompida`);
         break;
       }
-      
+
       if (navigatedAway) {
         console.log(`[selectorTester] Navegou para fora, recarregando artigos...`);
         continue;
@@ -502,13 +701,26 @@ export async function testSelectors(options: SelectorTestOptions) {
       if (processedInThisRound === 0) {
         scrolls++;
         console.log(`[selectorTester] Scroll ${scrolls}/${maxScrolls} (nenhum post processado nesta rodada)`);
+
+        // Se não há posts com aria-posinset, mostrar debug
+        if (articlesWithPosinset.length === 0) {
+          console.log(`[selectorTester] ⚠️ Nenhum post com aria-posinset encontrado. Verificando se há posts no feed...`);
+
+          const feedChildren = await feed.locator('> div').count();
+          console.log(`[selectorTester] Feed tem ${feedChildren} divs filhos diretos`);
+
+          // Verificar se há algum div com aria-posinset em qualquer lugar
+          const anyPosinset = await page.locator('div[aria-posinset]').count();
+          console.log(`[selectorTester] Total de divs com aria-posinset na página: ${anyPosinset}`);
+        }
+
         await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.9)).catch(()=>{});
         await sleep(rand(1200, 2000));
       }
     }
 
     console.log(`[selectorTester] ✅ Finalizado. Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`)
-    
+
   } finally {
     await context.close()
   }
