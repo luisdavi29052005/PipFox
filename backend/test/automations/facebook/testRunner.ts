@@ -78,7 +78,7 @@ export async function runTests(options: TestRunnerOptions) {
     groupUrl = 'https://www.facebook.com/groups/940840924057399',
     webhookUrl,
     headless = false,
-    maxPosts = 5,
+    maxPosts = 25,
     tests = ['login', 'health', 'selectors']
   } = options
 
@@ -280,7 +280,7 @@ if (require.main === module) {
     }
 
     // Parse max-posts option
-    const maxPosts = options['max-posts'] ? parseInt(options['max-posts']) : 5;
+    const maxPosts = options['max-posts'] ? parseInt(options['max-posts']) : 4;
     const headless = options['headless'] === 'true';
 
     let tests: ('login' | 'selectors' | 'health')[] = ['login', 'health', 'selectors'];

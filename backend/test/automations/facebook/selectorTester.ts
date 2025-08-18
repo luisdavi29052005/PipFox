@@ -2,6 +2,8 @@ import { chromium, BrowserContext, Page, Locator } from "playwright";
 import { openContextForAccount } from "../../../src/core/automations/facebook/session/context";
 import { processPostWithN8n } from "./helpers/n8nIntegration";
 import { postComment } from "../../../src/core/automations/facebook/actions/postComment";
+import fs from 'fs';
+import path from 'path';
 
 // ===== Helpers =====
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -131,8 +133,11 @@ function parseTimestamp(rawTimestamp: string): string | null {
   if (!rawTimestamp) return null;
 
   try {
+    // Normalize the timestamp
+    let normalized = rawTimestamp.trim().replace(/\s+/g, ' ');
+    
     // Handle relative timestamps like "4h", "2d", "1min"
-    const relativeMatch = rawTimestamp.match(
+    const relativeMatch = normalized.match(
       /^(\d+)\s*(h|min|m|s|seg|hora|dia|day|hr)s?\s*(ago|atrás)?$/i,
     );
     if (relativeMatch) {
@@ -163,9 +168,132 @@ function parseTimestamp(rawTimestamp: string): string | null {
 
       return now.toISOString();
     }
+    
+    // Handle "Today at HH:MM" format
+    const todayMatch = normalized.match(/Today at (\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (todayMatch) {
+      const hour = parseInt(todayMatch[1]);
+      const minute = parseInt(todayMatch[2]);
+      const period = todayMatch[3];
+      
+      let adjustedHour = hour;
+      if (period && period.toLowerCase() === 'pm' && hour < 12) {
+        adjustedHour = hour + 12;
+      } else if (period && period.toLowerCase() === 'am' && hour === 12) {
+        adjustedHour = 0;
+      }
+      
+      const now = new Date();
+      now.setHours(adjustedHour, minute, 0, 0);
+      return now.toISOString();
+    }
+    
+    // Handle "Yesterday at HH:MM" format
+    const yesterdayMatch = normalized.match(/Yesterday at (\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (yesterdayMatch) {
+      const hour = parseInt(yesterdayMatch[1]);
+      const minute = parseInt(yesterdayMatch[2]);
+      const period = yesterdayMatch[3];
+      
+      let adjustedHour = hour;
+      if (period && period.toLowerCase() === 'pm' && hour < 12) {
+        adjustedHour = hour + 12;
+      } else if (period && period.toLowerCase() === 'am' && hour === 12) {
+        adjustedHour = 0;
+      }
+      
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(adjustedHour, minute, 0, 0);
+      return yesterday.toISOString();
+    }
+    
+    // Handle "Month Day at HH:MM" format (e.g., "Jun 15 at 10:30 AM")
+    const monthDayMatch = normalized.match(/([A-Za-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/);
+    if (monthDayMatch) {
+      const monthName = monthDayMatch[1];
+      const day = parseInt(monthDayMatch[2]);
+      const hour = parseInt(monthDayMatch[3]);
+      const minute = parseInt(monthDayMatch[4]);
+      const period = monthDayMatch[5];
+      
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      let month = monthNames.indexOf(monthName.substring(0, 3));
+      
+      if (month === -1) {
+        // Try full month names
+        const fullMonthNames = ["January", "February", "March", "April", "May", "June", 
+                               "July", "August", "September", "October", "November", "December"];
+        month = fullMonthNames.findIndex(name => 
+          name.toLowerCase().startsWith(monthName.toLowerCase())
+        );
+      }
+      
+      if (month === -1) {
+        return null; // Invalid month name
+      }
+      
+      let adjustedHour = hour;
+      if (period && period.toLowerCase() === 'pm' && hour < 12) {
+        adjustedHour = hour + 12;
+      } else if (period && period.toLowerCase() === 'am' && hour === 12) {
+        adjustedHour = 0;
+      }
+      
+      const now = new Date();
+      const year = now.getMonth() > month ? now.getFullYear() : now.getFullYear() - 1;
+      
+      const date = new Date(year, month, day, adjustedHour, minute);
+      return date.toISOString();
+    }
+    
+    // Handle "Month Day, Year" format (e.g., "Jun 15, 2023")
+    const monthDayYearMatch = normalized.match(/([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/);
+    if (monthDayYearMatch) {
+      const monthName = monthDayYearMatch[1];
+      const day = parseInt(monthDayYearMatch[2]);
+      const year = parseInt(monthDayYearMatch[3]);
+      
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      let month = monthNames.indexOf(monthName.substring(0, 3));
+      
+      if (month === -1) {
+        const fullMonthNames = ["January", "February", "March", "April", "May", "June", 
+                               "July", "August", "September", "October", "November", "December"];
+        month = fullMonthNames.findIndex(name => 
+          name.toLowerCase().startsWith(monthName.toLowerCase())
+        );
+      }
+      
+      if (month === -1) {
+        return null;
+      }
+      
+      const date = new Date(year, month, day);
+      return date.toISOString();
+    }
+    
+    // Handle "HH:MM AM/PM" format (assume today)
+    const timeOnlyMatch = normalized.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (timeOnlyMatch) {
+      const hour = parseInt(timeOnlyMatch[1]);
+      const minute = parseInt(timeOnlyMatch[2]);
+      const period = timeOnlyMatch[3];
+      
+      let adjustedHour = hour;
+      if (period.toLowerCase() === 'pm' && hour < 12) {
+        adjustedHour = hour + 12;
+      } else if (period.toLowerCase() === 'am' && hour === 12) {
+        adjustedHour = 0;
+      }
+      
+      const now = new Date();
+      now.setHours(adjustedHour, minute, 0, 0);
+      return now.toISOString();
+    }
 
     // Try to parse as absolute date
-    const date = new Date(rawTimestamp);
+    const date = new Date(normalized);
     if (!isNaN(date.getTime())) {
       return date.toISOString();
     }
@@ -185,49 +313,305 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   const postId = (await postLocator.getAttribute("aria-posinset")) || "unknown";
   console.log(`[parsePost] Processing post with aria-posinset: ${postId}`);
 
-  // Step 1: Isolate content container to exclude comments (following document strategy)
-  // Use the first major child div which contains post content, not comments
-  const contentContainer = postLocator.locator("> div > div").first();
+  // Step 1: Isolate content container with multiple strategies
+  let contentContainer: Locator;
 
-  // Step 2: Extract author information using semantic selectors
+  // Multiple strategies to find the main content container
+  const containerStrategies = [
+    // Strategy 1: Semantic data attributes (most reliable)
+    '[data-ad-comet-preview="message"], [data-ad-preview="message"]',
+    
+    // Strategy 2: For group posts specifically (most critical for our case)
+    'div[data-pagelet="FeedUnit"] [role="article"] > div > div > div > div > div > div > div > div',
+    
+    // Strategy 3: Profile name proximity (more specific for groups)
+    'div[data-ad-rendering-role="profile_name"] + div + div',
+    
+    // Strategy 4: Common Facebook patterns
+    'div[role="article"] > div > div > div > div > div',
+    
+    // Strategy 5: Fallback for newer Facebook layouts
+    'div[data-pagelet="FeedUnit"] > div > div > div > div > div > div > div > div > div'
+  ];
+
+  for (const strategy of containerStrategies) {
+    try {
+      const container = postLocator.locator(strategy).first();
+      if (await container.isVisible({ timeout: 500 })) {
+        // Verify this is not a comment container - more robust check
+        const isCommentContainer = await container.evaluate((el) => {
+          let parent = el.parentElement;
+          while (parent && parent !== document.body) {
+            // Check for comment-specific attributes
+            const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+            const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+            
+            if (ariaLabel.includes('comment') || 
+                ariaLabel.includes('comentário') ||
+                dataTestId.includes('comment') ||
+                dataTestId.includes('comentário') ||
+                parent.classList.contains('comment') ||
+                parent.querySelector('[aria-label*="Comment"], [aria-label*="Comentário"]')) {
+              return true;
+            }
+            parent = parent.parentElement;
+          }
+          return false;
+        });
+        
+        if (!isCommentContainer) {
+          contentContainer = container;
+          console.log(`[parsePost] Using content container strategy: ${strategy}`);
+          break;
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  // Fallback if no strategy worked
+  if (!contentContainer) {
+    // Try to find the main content by excluding comments
+    const allDivs = await postLocator.locator('> div').all();
+    for (const div of allDivs) {
+      const isComment = await div.evaluate((el) => {
+        let parent = el.parentElement;
+        while (parent && parent !== document.body) {
+          const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+          if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+            return true;
+          }
+          parent = parent.parentElement;
+        }
+        return false;
+      });
+      
+      if (!isComment) {
+        contentContainer = div;
+        console.warn(`[parsePost] Post ${postId}: Using div-based fallback content container`);
+        break;
+      }
+    }
+  }
+
+  // Final fallback
+  if (!contentContainer) {
+    contentContainer = postLocator;
+    console.error(`[parsePost] Post ${postId}: Using postLocator as fallback content container - may include comments`);
+  }
+
+  // Step 2: Extract author information with multiple strategies (CRITICAL IMPROVEMENT)
   let authorName: string | null = null;
   let authorUrl: string | null = null;
 
   try {
-    // Use semantic header structure (h2 > a pattern)
-    const authorLocator = contentContainer.locator("h2 a, h3 a, h4 a").first();
-    authorName = await authorLocator.innerText({ timeout: 2000 });
-    authorUrl = await authorLocator.getAttribute("href");
-    console.log(`[parsePost] Author found: ${authorName}`);
+    const authorStrategies = [
+      // Strategy 1: Semantic data attribute (most reliable for regular posts)
+      'div[data-ad-rendering-role="profile_name"] a',
+      
+      // Strategy 2: For group posts (more specific - MOST IMPORTANT FOR GROUPS)
+      'div[data-ad-comet-preview="story"][data-ad-preview="story"] a[href*="/groups/"][role="link"]:not([href*="/permalink/"]):not([href*="/posts/"])',
+      
+      // Strategy 3: Common header patterns
+      'h2 a, h3 a, h4 a',
+      
+      // Strategy 4: Facebook's newer patterns
+      'span[data-testid="story-subtitle"] a[href*="/user/"], span[data-testid="story-subtitle"] a[href*="/profile.php"]',
+      
+      // Strategy 5: Direct author container for newer layouts
+      'div[id^=":"] > div > div > div > span > span > a',
+      
+      // Strategy 6: Group-specific author container (VERY IMPORTANT)
+      'div[data-pagelet="FeedUnit"] [role="article"] div[role="heading"] a',
+      
+      // Strategy 7: Author container with specific aria-label
+      'a[aria-label][href*="/user/"], a[aria-label][href*="/profile.php"], a[aria-label][href*="/groups/"]',
+      
+      // Strategy 8: Author container with specific class patterns (Facebook's dynamic classes)
+      'a[href*="/user/"].x1i11i0x, a[href*="/profile.php"].x1i10h2o, a[href*="/groups/"].x1i10h2o',
+      
+      // Strategy 9: Author in group context (SPECIFIC TO GROUPS - CRITICAL)
+      'a[href*="/groups/"][href*="/user/"], a[href*="/groups/"][href*="/profile.php"]',
+      
+      // Strategy 10: Author in group context without specific paths
+      'a[href*="/groups/"]:not([href*="/permalink/"]):not([href*="/posts/"]):not([href*="/photos/"])'
+    ];
+
+    for (const strategy of authorStrategies) {
+      try {
+        const authorLocator = contentContainer.locator(strategy).first();
+        if (await authorLocator.isVisible({ timeout: 1000 })) {
+          // Verify it's not a comment author - more robust check
+          const isInComment = await authorLocator.evaluate((el) => {
+            let parent = el.parentElement;
+            while (parent && parent !== document.body) {
+              // Check for comment-specific attributes
+              const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+              const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+              
+              if (ariaLabel.includes('comment') || 
+                  ariaLabel.includes('comentário') ||
+                  dataTestId.includes('comment') ||
+                  dataTestId.includes('comentário') ||
+                  parent.classList.contains('comment') ||
+                  parent.querySelector('[aria-label*="Comment"], [aria-label*="Comentário"]')) {
+                return true;
+              }
+              parent = parent.parentElement;
+            }
+            return false;
+          });
+
+          if (!isInComment) {
+            authorName = await authorLocator.innerText();
+            authorUrl = await authorLocator.getAttribute("href");
+            
+            // Additional validation for author name
+            if (authorName && authorName.trim().length > 0 && 
+                !authorName.includes('·') && 
+                !authorName.match(/^\d+$/) &&
+                !authorName.match(/(Curtir|Like|Comentar|Comment|Share|Compartilhar)/i) &&
+                authorName.length < 100) { // Reasonable name length
+            
+              // Check if it looks like a name (has spaces or is a single reasonable word)
+              const isReasonableName = authorName.trim().includes(' ') || 
+                                      (authorName.trim().length > 2 && authorName.trim().length < 20);
+              
+              if (isReasonableName) {
+                console.log(`[parsePost] Author found with strategy "${strategy}": ${authorName}`);
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    // If still no author found, try more aggressive search
+    if (!authorName) {
+      const allLinks = await contentContainer.locator('a[href]').all();
+      for (const link of allLinks) {
+        try {
+          const href = await link.getAttribute('href');
+          let text = await link.innerText();
+          
+          // Clean up the text
+          text = text.trim().replace(/\s+/g, ' ');
+          
+          // Check if it looks like a profile link
+          if (href && (href.includes('/user/') || href.includes('/profile.php') || 
+              (href.includes('/groups/') && !href.includes('/permalink/')))) {
+            
+            // Skip if it's a comment link
+            const isCommentLink = await link.evaluate((el) => {
+              let parent = el.parentElement;
+              while (parent && parent !== document.body) {
+                const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+                if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+                  return true;
+                }
+                parent = parent.parentElement;
+              }
+              return false;
+            });
+            
+            if (isCommentLink) continue;
+            
+            // Check if text looks like a name (has spaces, reasonable length)
+            if (text && text.length > 2 && text.length < 50 && 
+                (text.includes(' ') || text.length > 3) && // Allow single names if they're reasonable
+                !text.includes('@') &&
+                !text.match(/(Curtir|Like|Comentar|Comment|Compartilhar|Share)/i) &&
+                !text.match(/^\d+$/) &&
+                !text.includes('·')) {
+              
+              authorName = text;
+              authorUrl = href;
+              console.log(`[parsePost] Author found with fallback strategy: ${authorName}`);
+              break;
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    // Final fallback: Look for any text that looks like a name near the top of the post
+    if (!authorName) {
+      // Get all text elements in the post
+      const allTextElements = await contentContainer.locator('*').allInnerTexts();
+      const allText = allTextElements.join('\n');
+      
+      // Look for patterns that might be names
+      const namePatterns = [
+        // Pattern for "Posted by NAME on DATE" or similar
+        /Posted by ([\w\s.,-]+)/i,
+        // Pattern for "NAME shared a post" or similar
+        /([\w\s.,-]+) (shared|posted|created) a /i,
+        // Pattern for just a name at the beginning
+        /^([\w\s.,-]+)\n/,
+        // Pattern for group-specific author format
+        /(?:\bby\s+|por\s+|^)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/
+      ];
+      
+      for (const pattern of namePatterns) {
+        const match = allText.match(pattern);
+        if (match && match[1]) {
+          const potentialName = match[1].trim();
+          if (potentialName.length > 2 && potentialName.length < 50 && 
+              potentialName.split(' ').length <= 4) { // Reasonable name length and word count
+            authorName = potentialName;
+            console.log(`[parsePost] Author found with final fallback strategy: ${authorName}`);
+            break;
+          }
+        }
+      }
+    }
   } catch (e) {
-    console.warn(
-      `[parsePost] Post ${postId}: Could not extract author information`,
-    );
+    console.warn(`[parsePost] Post ${postId}: Could not extract author information`, e);
   }
 
-  // Step 3: Extract post text with "See More" handling
+  // Step 3: Extract post text with multiple strategies
   let text: string | null = null;
   let externalLinks: Array<{url: string; text: string; domain: string}> = [];
 
   try {
     // Handle "See More" button first
     const seeMoreButton = contentContainer.locator(
-      'div[role="button"]:has-text("See More"), div[role="button"]:has-text("Ver mais")',
+      'div[role="button"]:has-text("See More"), div[role="button"]:has-text("Ver mais"), div[role="button"][aria-label="See more"]'
     );
     if (await seeMoreButton.isVisible({ timeout: 1000 })) {
       console.log(`[parsePost] Post ${postId}: Expanding "See More" content`);
       await seeMoreButton.click();
-      await postLocator.page().waitForTimeout(800);
+      await sleep(1000);
     }
 
     // Try multiple text extraction strategies with quality filtering
     const textSelectors = [
-      'div[data-ad-preview="message"]',
+      // Facebook's newer data attributes (most reliable)
+      '[data-ad-comet-preview="message"] > div > div',
+      '[data-ad-preview="message"] > div > div',
       '[data-testid="post_message"]',
-      'div[data-ad-comet-preview="message"]',
+      
+      // Common text container patterns
       'div[dir="auto"][style*="text-align"]',
       'span[dir="auto"]',
-      'div[dir="auto"]'
+      'div[dir="auto"]',
+      
+      // More specific patterns for different post types
+      'div[data-testid="post_message"] div[style*="line-height"]',
+      'div[data-uniqueid] > div > div > div > div > span > span',
+      
+      // Group-specific patterns
+      'div[data-pagelet="FeedUnit"] [role="article"] > div > div > div > div > div > div > div > div > span > span',
+      
+      // Fallback strategies
+      'div[id^=":"] > div > div > div > div > div > div > span > span',
+      'div[role="article"] > div > div > div > div > div > div > div > span > span'
     ];
 
     // Function to check if text is meaningful (not random encoded strings)
@@ -245,10 +629,12 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         /^[a-zA-Z0-9]+\.(com|net|org|br)$/, // Just domain names without protocol
         /^www\.[a-zA-Z0-9]+\.(com|net|org|br)$/, // www domains
         /^https?:\/\/[a-zA-Z0-9]+\.(com|net|org|br)/, // Full URLs
-        /^[a-zA-Z0-9]{7}\.(com|net|org)$/, // Facebook tracking URLs like "Q1nF13V.com"
-        /^[a-zA-Z0-9]{8,12}\.(com|net|org)$/, // More tracking URLs like "BCsg7iI.com", "BWMrXpleBw.com"
-        /^[a-zA-Z0-9]{40,}$/, // Very long random strings without spaces
-        /^[a-zA-Z0-9]{20,}$/ // Medium random strings like "stdSopnoreif1ega7fn16m23l20a9facrhmfu4r7ue2L5mmcl93t2"
+        /^[a-zA-Z0-9]{7}\.(com|net|org)$/, // Facebook tracking URLs
+        /^[a-zA-Z0-9]{8,12}\.(com|net|org)$/, // More tracking URLs
+        /^[a-zA-Z0-9]{40,}$/, // Very long random strings
+        /^[a-zA-Z0-9]{20,}$/, // Medium random strings
+        /^Mostrar mais$/, // "Show more" text
+        /^Show more$/
       ];
 
       // Check if content matches any UI pattern
@@ -258,7 +644,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         }
       }
 
-      // Check for reasonable word/space ratio (real text should have spaces or be short)
+      // Check for reasonable word/space ratio
       const words = trimmed.split(/\s+/);
       const totalChars = trimmed.length;
       const wordCount = words.length;
@@ -268,7 +654,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         // Unless it contains common readable patterns
         const readablePatterns = [
           /[.!?]/, // Has punctuation
-          /[aeiou]{2,}/i, // Has vowel clusters typical in real words
+          /[aeiou]{2,}/i, // Has vowel clusters
           /\b(the|and|or|but|with|for|at|by|from|to|of|in|on)\b/i // Common English words
         ];
 
@@ -278,7 +664,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         }
       }
 
-      // Check for reasonable character distribution (real text has vowels)
+      // Check for reasonable character distribution
       const vowelCount = (trimmed.match(/[aeiouAEIOU]/g) || []).length;
       const vowelRatio = vowelCount / totalChars;
 
@@ -289,6 +675,11 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
       // Additional check for consecutive identical characters (spam-like)
       if (/(.)\1{4,}/.test(trimmed)) {
+        return false;
+      }
+      
+      // Check if it's just emojis or special characters
+      if (/^[^\p{L}\p{N}]+$/u.test(trimmed)) {
         return false;
       }
 
@@ -302,7 +693,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
         for (const textEl of textElements) {
           try {
-            const content = await textEl.innerText({ timeout: 1000 });
+            const content = await textEl.innerText({ timeout: 1500 });
             if (content && content.trim().length > 10 && isValidText(content)) {
               if (content.trim().length > maxLength) {
                 text = content.trim();
@@ -321,7 +712,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       }
     }
 
-    // Extract external links from the entire content container (not just text)
+    // Extract external links from the entire content container
     try {
       const linkLocators = await contentContainer.locator("a[href]").all();
       for (const linkLoc of linkLocators) {
@@ -330,6 +721,36 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
           const linkText = await linkLoc.innerText().catch(() => "");
 
           if (href) {
+            // Special case: Facebook short links that might be external
+            if (href.includes("l.facebook.com/l.php?u=")) {
+              try {
+                const urlParams = new URLSearchParams(href.split('?')[1]);
+                const externalUrl = urlParams.get('u');
+                if (externalUrl) {
+                  try {
+                    const decodedUrl = decodeURIComponent(externalUrl);
+                    const urlObj = new URL(decodedUrl);
+                    externalLinks.push({
+                      url: decodedUrl,
+                      text: linkText.trim() || urlObj.hostname,
+                      domain: urlObj.hostname
+                    });
+                    continue;
+                  } catch (e) {
+                    // If URL parsing fails, still include the decoded URL
+                    externalLinks.push({
+                      url: decodedUrl,
+                      text: linkText.trim() || decodedUrl,
+                      domain: "facebook-redirect"
+                    });
+                    continue;
+                  }
+                }
+              } catch (e) {
+                // Continue to normal processing
+              }
+            }
+
             // Filter out Facebook internal links
             const isFacebookLink = href.includes("facebook.com") ||
                                  href.includes("fb.com") ||
@@ -339,22 +760,16 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                                  href.includes("/permalink/") ||
                                  href.includes("/photo/") ||
                                  href.includes("/photos/");
-
-            // Include external links or meaningful internal references
-            if (!isFacebookLink || href.startsWith("http")) {
-              // Clean up the URL for better readability
-              let cleanHref = href;
+            
+            // Include external links
+            if (!isFacebookLink) {
               try {
-                const url = new URL(href);
-                // Keep only meaningful external domains
-                if (!url.hostname.includes("facebook.com") && !url.hostname.includes("fb.com")) {
-                  cleanHref = url.href;
-                  externalLinks.push({
-                    url: cleanHref,
-                    text: linkText.trim() || url.hostname,
-                    domain: url.hostname
-                  });
-                }
+                const url = new URL(href.startsWith('http') ? href : `https://${href}`);
+                externalLinks.push({
+                  url: url.href,
+                  text: linkText.trim() || url.hostname,
+                  domain: url.hostname
+                });
               } catch (e) {
                 // If URL parsing fails, include as is if it looks like a URL
                 if (href.startsWith("http") || href.includes(".com") || href.includes(".net") || href.includes(".org")) {
@@ -368,189 +783,299 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             }
           }
         } catch (e) {
-          // Skip failed links
+          continue;
         }
       }
 
       // Also search for URLs in the text content itself
       if (text) {
-        const urlRegex = /https?:\/\/[^\s]+/g;
+        const urlRegex = /https?:\/\/[^\s<>"'(){}[\]]+/g;
         const textUrls = text.match(urlRegex) || [];
         for (const url of textUrls) {
           try {
             const urlObj = new URL(url);
             if (!urlObj.hostname.includes("facebook.com") && !urlObj.hostname.includes("fb.com")) {
-              externalLinks.push({
-                url: url,
-                text: urlObj.hostname,
-                domain: urlObj.hostname
-              });
+              // Check if this URL is already in externalLinks
+              const alreadyAdded = externalLinks.some(link => 
+                link.url.includes(urlObj.hostname) || urlObj.hostname.includes(link.domain)
+              );
+              
+              if (!alreadyAdded) {
+                externalLinks.push({
+                  url: url,
+                  text: urlObj.hostname,
+                  domain: urlObj.hostname
+                });
+              }
             }
           } catch (e) {
-            // Skip invalid URLs
+            continue;
           }
         }
       }
     } catch (e) {
-      // Skip link extraction if fails
+      console.warn(`[parsePost] Post ${postId}: Link extraction error`, e);
     }
 
-    console.log(
-      `[parsePost] Post ${postId}: Text extracted (${text?.length || 0} chars, ${externalLinks.length} external links)`,
-    );
+    // Fallback if no text found
+    if (!text) {
+      const allText = await contentContainer.innerText({ timeout: 2000 });
+      if (allText && allText.trim().length > 50) {
+        // Filter out common UI elements
+        const lines = allText.split('\n').filter(line => {
+          const trimmed = line.trim();
+          return trimmed.length > 10 &&
+                 !trimmed.match(/^\d+\s*(min|hora|dia|comentário|curtir|compartilhar)/i) &&
+                 !trimmed.includes('·') &&
+                 !trimmed.match(/^\d+$/) &&
+                 !trimmed.match(/^[a-zA-Z0-9]{20,}$/) &&
+                 !trimmed.match(/^s\d+[a-zA-Z0-9]+\.com/) &&
+                 trimmed !== 'Ver tradução' &&
+                 trimmed !== 'See translation' &&
+                 trimmed !== 'Mostrar mais' &&
+                 trimmed !== 'Show more';
+        });
 
-    // Debug: Log the actual text content
-    if (text) {
-      console.log(`[parsePost] Post ${postId}: FULL TEXT: "${text}"`);
-    } else {
-      console.warn(`[parsePost] Post ${postId}: NO TEXT EXTRACTED - trying fallback...`);
+        // Additional filtering for meaningful content
+        const meaningfulLines = lines.filter(line => {
+          const words = line.trim().split(/\s+/);
+          const totalChars = line.trim().length;
+          return words.length > 1 || (words.length === 1 && totalChars < 30);
+        });
 
-      // Last resort: try to get any text from the content container
-      try {
-        const fallbackText = await contentContainer.innerText({ timeout: 2000 });
-        if (fallbackText && fallbackText.trim().length > 20) {
-          // Filter out common UI elements and keep only meaningful content
-          const lines = fallbackText.split('\n').filter(line => {
-            const trimmed = line.trim();
-            return trimmed.length > 10 &&
-                   !trimmed.match(/^\d+\s*(min|hora|dia|comentário|curtir|compartilhar)/i) &&
-                   !trimmed.includes('·') &&
-                   !trimmed.match(/^\d+$/) &&
-                   !trimmed.match(/^[a-zA-Z0-9]{20,}$/) && // Filter random strings
-                   !trimmed.match(/^s\d+[a-zA-Z0-9]+\.com/) && // Filter tracking URLs
-                   trimmed !== 'Ver tradução' &&
-                   trimmed !== 'See translation';
-          });
-
-          // Additional check for meaningful content
-          const meaningfulLines = lines.filter(line => {
-            const words = line.trim().split(/\s+/);
-            const totalChars = line.trim().length;
-            const wordCount = words.length;
-
-            // Real text should have multiple words or reasonable length
-            return wordCount > 1 || (wordCount === 1 && totalChars < 30);
-          });
-
-          if (meaningfulLines.length > 0) {
-            text = meaningfulLines.join(' ').trim();
-            console.log(`[parsePost] Post ${postId}: FALLBACK TEXT: "${text}"`);
-          }
+        if (meaningfulLines.length > 0) {
+          text = meaningfulLines.join(' ').trim();
+          console.log(`[parsePost] Post ${postId}: FALLBACK TEXT: "${text.substring(0, 100)}..."`);
         }
-      } catch (e) {
-        console.warn(`[parsePost] Post ${postId}: Fallback text extraction failed`);
       }
     }
   } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Could not extract text content`);
+    console.warn(`[parsePost] Post ${postId}: Could not extract text content`, e);
   }
 
-  // Step 4: Extract media using stable selectors
+  // Step 4: Extract media with multiple strategies
   let imageUrls: string[] = [];
   let videoUrls: string[] = [];
 
   try {
-    // Images: Use semantic photo link structure
-    const imgLocators = await contentContainer
-      .locator('a[href*="/photo/"] img, a[href*="/photos/"] img')
-      .all();
-    for (const imgLoc of imgLocators) {
+    // Images: Multiple strategies for finding images
+    const imageStrategies = [
+      // Strategy 1: Standard photo links (most reliable)
+      'a[href*="/photo/"] img, a[href*="/photos/"] img',
+      // Strategy 2: Data-testid patterns
+      'img[data-imgperflogname="profileMediaImage"]',
+      // Strategy 3: Common image containers
+      'div[role="button"][aria-label*="Imagem"] img, div[role="button"][aria-label*="Image"] img',
+      // Strategy 4: Carousel images
+      'div[aria-label="Carrossel"] img, div[aria-label="Carousel"] img, div[aria-label="Slide"] img',
+      // Strategy 5: Direct image elements
+      'img[src*="scontent"], img[src*="fbcdn"]',
+      // Strategy 6: Group post specific patterns
+      'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/photo/"] img'
+    ];
+
+    for (const strategy of imageStrategies) {
       try {
-        const src = await imgLoc.getAttribute("src");
-        if (
-          src &&
-          !src.includes("emoji") &&
-          !src.includes("static") &&
-          (src.includes("scontent") || src.includes("fbcdn"))
-        ) {
-          imageUrls.push(src);
+        const imgLocators = await contentContainer.locator(strategy).all();
+        for (const imgLoc of imgLocators) {
+          try {
+            const src = await imgLoc.getAttribute("src");
+            if (
+              src &&
+              !src.includes("emoji") &&
+              !src.includes("static") &&
+              (src.includes("scontent") || src.includes("fbcdn")) &&
+              !src.includes("blank.gif")
+            ) {
+              // Avoid duplicates
+              if (!imageUrls.includes(src)) {
+                imageUrls.push(src);
+              }
+            }
+          } catch (e) {
+            continue;
+          }
         }
       } catch (e) {
-        // Skip failed images
+        continue;
       }
     }
 
-    // Videos: Direct video element targeting
-    const videoLocators = await contentContainer.locator("video[src]").all();
-    for (const videoLoc of videoLocators) {
+    // Videos: Multiple strategies for finding videos
+    const videoStrategies = [
+      // Strategy 1: Direct video elements
+      'video[src]',
+      // Strategy 2: Video containers
+      'div[data-sigil="inlineVideo"]',
+      // Strategy 3: Video links
+      'a[href*="/watch/"]',
+      // Strategy 4: Group post specific patterns
+      'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/watch/"]',
+      // Strategy 5: Embedded video patterns
+      'div[data-testid="video-post"]'
+    ];
+
+    for (const strategy of videoStrategies) {
       try {
-        const src = await videoLoc.getAttribute("src");
-        if (src) {
-          videoUrls.push(src);
+        const videoLocators = await contentContainer.locator(strategy).all();
+        for (const videoLoc of videoLocators) {
+          try {
+            let src = await videoLoc.getAttribute("src");
+            if (!src) {
+              // Try to get video URL from data-src or other attributes
+              src = await videoLoc.getAttribute("data-src") || 
+                    await videoLoc.getAttribute("data-video-src") ||
+                    await videoLoc.getAttribute("href");
+            }
+            
+            if (src && !videoUrls.includes(src)) {
+              videoUrls.push(src);
+            }
+          } catch (e) {
+            continue;
+          }
         }
       } catch (e) {
-        // Skip failed videos
+        continue;
       }
     }
 
-    console.log(
-      `[parsePost] Post ${postId}: Media extracted (${imageUrls.length} images, ${videoUrls.length} videos)`,
-    );
+    // If no videos found, check for video metadata
+    if (videoUrls.length === 0) {
+      const videoMetadata = await contentContainer.locator('meta[property="og:video"]').all();
+      for (const meta of videoMetadata) {
+        try {
+          const videoUrl = await meta.getAttribute("content");
+          if (videoUrl && !videoUrls.includes(videoUrl)) {
+            videoUrls.push(videoUrl);
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
   } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Could not extract media`);
+    console.warn(`[parsePost] Post ${postId}: Could not extract media`, e);
   }
 
-  // Step 5: Extract timestamp and permalink using priority-based strategy
+  // Step 5: Extract timestamp with multiple strategies
   let timeText: string | null = null;
   let timeISO: string | null = null;
   let permalink: string | null = null;
 
   try {
-    // Priority-based timestamp selector strategy from document
-    const timestampSelectors = [
-      // Strategy 1: Header timestamps (highest priority)
+    const timestampStrategies = [
+      // Strategy 1: Header timestamps (most reliable)
       'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]',
       'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]',
-      // Strategy 2: Heading proximity
-      'h2 ~ div a[href*="/posts/"]',
-      'h3 ~ div a[href*="/posts/"]',
-      'h4 ~ div a[href*="/posts/"]',
-      // Strategy 3: Generic time elements
-      'a[href*="/posts/"]:has(time)',
-      'a[href*="/posts/"]:has(abbr)',
-      'a[href*="/permalink/"]:has(time)',
-      'a[href*="/permalink/"]:has(abbr)',
-      // Strategy 4: Fallback
+      
+      // Strategy 2: Specific timestamp containers
+      'span[data-testid="story-subtitle"] a',
+      'span[data-testid="story-subtitle"] time',
+      'span[data-testid="story-subtitle"] abbr',
+      
+      // Strategy 3: Group-specific timestamp
+      'div[data-pagelet="FeedUnit"] [role="article"] span[role="presentation"] a',
+      
+      // Strategy 4: Direct timestamp elements
+      'abbr[title], time[datetime]',
+      
+      // Strategy 5: Group post timestamp patterns
+      'a[href*="/groups/"][href*="/permalink/"], a[href*="/groups/"][href*="/posts/"]',
+      
+      // Strategy 6: Fallback
       'span > a[href*="/posts/"]',
       'span > a[href*="/permalink/"]',
+      'div[class*="timestamp"] a'
     ];
 
-    for (const selector of timestampSelectors) {
+    for (const strategy of timestampStrategies) {
       try {
-        const timestampLoc = contentContainer.locator(selector).first();
+        const timestampLoc = contentContainer.locator(strategy).first();
         if (await timestampLoc.isVisible({ timeout: 500 })) {
-          // Check if not in comments
+          // Check if not in comments - more robust check
           const isInComment = await timestampLoc.evaluate((el) => {
-            return (
-              el.closest('[role="article"][aria-label*="Comment"]') !== null ||
-              el.closest('[aria-label*="Comentário"]') !== null ||
-              el.closest('[data-testid*="comment"]') !== null
-            );
+            let parent = el.parentElement;
+            while (parent && parent !== document.body) {
+              const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+              const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+              
+              if (ariaLabel.includes('comment') || 
+                  ariaLabel.includes('comentário') ||
+                  dataTestId.includes('comment') ||
+                  dataTestId.includes('comentário') ||
+                  parent.classList.contains('comment')) {
+                return true;
+              }
+              parent = parent.parentElement;
+            }
+            return false;
           });
 
           if (!isInComment) {
-            timeText = await timestampLoc.innerText();
+            // Get text from the element or its time/abbr child
+            let rawTimeText = await timestampLoc.innerText();
+            if (!rawTimeText) {
+              // Try to get from title attribute (for abbr elements)
+              rawTimeText = await timestampLoc.getAttribute('title') || '';
+            }
+            
+            // Clean up the timestamp text
+            timeText = rawTimeText.trim().replace(/\s+/g, ' ');
             permalink = await timestampLoc.getAttribute("href");
-
-            if (timeText) {
-              timeISO = parseTimestamp(timeText.trim());
+            
+            // If no permalink, try to find it in nearby elements
+            if (!permalink) {
+              const nearbyLinks = await timestampLoc.locator('.. a[href*="/posts/"], .. a[href*="/permalink/"]').all();
+              for (const link of nearbyLinks) {
+                const href = await link.getAttribute("href");
+                if (href && (href.includes('/posts/') || href.includes('/permalink/'))) {
+                  permalink = href;
+                  break;
+                }
+              }
             }
 
-            console.log(
-              `[parsePost] Post ${postId}: Timestamp found via selector "${selector}": "${timeText}"`,
-            );
-            break;
+            if (timeText) {
+              timeISO = parseTimestamp(timeText);
+              if (timeISO) {
+                console.log(
+                  `[parsePost] Post ${postId}: Timestamp found via strategy "${strategy}": "${timeText}"`,
+                );
+                break;
+              }
+            }
           }
         }
       } catch (e) {
-        // Try next selector
         continue;
       }
     }
+    
+    // If no timestamp found, check for alternative patterns
+    if (!timeText) {
+      // Check for common timestamp patterns in the content
+      const timestampPatterns = [
+        /\b(\d{1,2}:\d{2}(?:\s*[AP]M)?)\b/i,  // HH:MM AM/PM
+        /\b(Today|Ontem)\s+at\s+(\d{1,2}:\d{2})/i,  // Today/Yesterday at HH:MM
+        /\b([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?(?:, \d{4})?)\b/  // Month Day, Year
+      ];
+      
+      const contentText = await contentContainer.innerText();
+      for (const pattern of timestampPatterns) {
+        const match = contentText.match(pattern);
+        if (match) {
+          timeText = match[0];
+          timeISO = parseTimestamp(timeText);
+          if (timeISO) {
+            console.log(`[parsePost] Post ${postId}: Found timestamp pattern: "${timeText}"`);
+            break;
+          }
+        }
+      }
+    }
   } catch (e) {
-    console.warn(
-      `[parsePost] Post ${postId}: Could not extract timestamp/permalink`,
-    );
+    console.warn(`[parsePost] Post ${postId}: Could not extract timestamp/permalink`, e);
   }
 
   // Extract post ID from permalink if available
@@ -621,9 +1146,11 @@ export interface SelectorTestOptions {
   maxScrolls?: number;
   pauseBetweenPostsMs?: [number, number];
   healthCheckOnly?: boolean;
+  saveToJson?: boolean;
+  jsonOutputPath?: string;
 }
 
-// Selector health check based on document recommendations
+// Selector health check with more comprehensive tests
 async function runSelectorHealthCheck(page: Page): Promise<boolean> {
   console.log("[Health Check] Verificando seletores críticos...");
 
@@ -639,17 +1166,41 @@ async function runSelectorHealthCheck(page: Page): Promise<boolean> {
       selector: 'div[role="article"]',
       required: true,
     },
-    { name: "author headers", selector: "h2 a, h3 a, h4 a", required: false },
+    { 
+      name: "author containers", 
+      selector: 'div[data-ad-rendering-role="profile_name"], h2, h3, h4, span[data-testid="story-subtitle"], div[role="heading"]', 
+      required: true  // Now required as it's critical for our operation
+    },
     {
       name: "text containers",
-      selector: 'div[data-ad-preview="message"]',
+      selector: 'div[data-ad-preview="message"], [data-testid="post_message"], div[data-ad-comet-preview="message"]',
+      required: true  // Now required
+    },
+    {
+      name: "timestamp elements",
+      selector: 'a[href*="/posts/"], a[href*="/permalink/"], abbr[title], time[datetime], span[data-testid="story-subtitle"]',
+      required: true  // Now required
+    },
+    {
+      name: "image containers",
+      selector: 'a[href*="/photo/"] img, img[src*="scontent"], div[role="button"][aria-label*="Image"]',
       required: false,
     },
     {
-      name: "timestamp links",
-      selector: 'a[href*="/posts/"]',
-      required: false,
+      name: "video containers",
+      selector: 'video[src], div[data-sigil="inlineVideo"], a[href*="/watch/"]',
+      required: false
     },
+    {
+      name: "see more buttons",
+      selector: 'div[role="button"]:has-text("See More"), div[role="button"]:has-text("Ver mais")',
+      required: false
+    },
+    {
+      name: "group post structure",
+      selector: 'div[data-pagelet="FeedUnit"] [role="article"]',
+      required: true  // Now required for group processing
+    }
   ];
 
   let healthScore = 0;
@@ -731,13 +1282,15 @@ if (require.main === module) {
     let userId = process.argv[2];
     let accountId = process.argv[3];
     const groupUrl =
-      process.argv[4] || "https://www.facebook.com/groups/tomorandosozinhoeagoraof";
+      process.argv[4] || "https://www.facebook.com/groups/tomorandosozinhoeagoraof    ";
     const headless = process.argv.includes("--headless");
     const maxPosts = parseInt(
       process.argv
         .find((arg) => arg.startsWith("--max-posts="))
-        ?.split("=")[1] || "5",
+        ?.split("=")[1] || "25",
     );
+    const saveToJson = !process.argv.includes("--no-json");
+    const jsonOutputPath = process.argv.find(arg => arg.startsWith("--json-output="))?.split("=")[1];
 
     // Auto discovery
     if (!userId || !accountId || userId === "auto" || accountId === "auto") {
@@ -763,6 +1316,8 @@ if (require.main === module) {
         groupUrl,
         headless,
         maxPosts,
+        saveToJson,
+        jsonOutputPath
       });
       console.log("✅ Teste standalone concluído com sucesso");
       process.exit(0);
@@ -791,6 +1346,8 @@ export async function testSelectors(options: SelectorTestOptions) {
     maxPosts = 25,
     maxScrolls = 120,
     pauseBetweenPostsMs = [700, 1400],
+    saveToJson = true,
+    jsonOutputPath
   } = options;
 
   if (!groupUrl) throw new Error("groupUrl é obrigatória");
@@ -805,6 +1362,10 @@ export async function testSelectors(options: SelectorTestOptions) {
   // Usar o contexto oficial do projeto
   const context = await openContextForAccount(userId, accountId, headless);
   const page = await context.newPage();
+
+  // Array para armazenar os resultados - DEFINIDO FORA DO TRY PARA SER ACESSÍVEL MESMO EM CASO DE ERRO
+  const results: Array<PostData & { groupUrl: string }> = [];
+  let processed = 0;
 
   try {
     await page.goto(groupUrl, { waitUntil: "domcontentloaded" });
@@ -834,7 +1395,6 @@ export async function testSelectors(options: SelectorTestOptions) {
     }
 
     const seen = new Set<string>();
-    let processed = 0;
     let scrolls = 0;
     let shouldStop = false;
 
@@ -887,6 +1447,9 @@ export async function testSelectors(options: SelectorTestOptions) {
           const data = await parsePost(posinsetElement);
           const payload = { ...data, groupUrl };
 
+          // Adicionar ao array de resultados
+          results.push(payload);
+          
           console.log(`[selectorTester] ✅ Post ${posinsetValue} extraído:`, {
             id: payload.postId,
             author: payload.authorName,
@@ -1009,7 +1572,49 @@ export async function testSelectors(options: SelectorTestOptions) {
     console.log(
       `[selectorTester] ✅ Finalizado. Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`,
     );
+  } catch (error) {
+    console.error(`[selectorTester] ❌ Erro geral durante o processamento:`, error);
   } finally {
+    // SALVAR RESULTADOS SEMPRE NO BLOCO FINALLY
+    if (saveToJson && results.length > 0) {
+      try {
+        const outputDir = jsonOutputPath || path.join(process.cwd(), 'output');
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `facebook_posts_${timestamp}.json`;
+        const filePath = path.join(outputDir, fileName);
+        
+        fs.writeFileSync(filePath, JSON.stringify({
+          meta: {
+            groupUrl,
+            accountId,
+            userId,
+            processed,
+            uniquePosts: seen ? seen.size : results.length,
+            timestamp: new Date().toISOString(),
+            status: 'completed'
+          },
+          posts: results
+        }, null, 2));
+        
+        console.log(`[selectorTester] 💾 Resultados salvos em: ${filePath}`);
+        console.log(`[selectorTester] 📊 Total de posts salvos: ${results.length}`);
+        
+        // Mostrar resumo no console
+        const authors = new Set(results.filter(p => p.authorName).map(p => p.authorName));
+        console.log(`[selectorTester] 👤 Autores únicos encontrados: ${authors.size}`);
+        console.log(`[selectorTester] 📝 Posts com texto: ${results.filter(p => p.text).length}`);
+        console.log(`[selectorTester] 🖼️ Posts com imagens: ${results.filter(p => p.imageUrls.length > 0).length}`);
+        console.log(`[selectorTester] ▶️ Posts com vídeos: ${results.filter(p => p.videoUrls.length > 0).length}`);
+      } catch (err) {
+        console.error(`[selectorTester] ❌ Erro ao salvar resultados em JSON:`, err);
+      }
+    }
+    
+    // Fechar o contexto mesmo em caso de erro
     await context.close();
   }
 }
