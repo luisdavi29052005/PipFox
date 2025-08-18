@@ -1366,6 +1366,7 @@ export async function testSelectors(options: SelectorTestOptions) {
   // Array para armazenar os resultados - DEFINIDO FORA DO TRY PARA SER ACESSÍVEL MESMO EM CASO DE ERRO
   const results: Array<PostData & { groupUrl: string }> = [];
   let processed = 0;
+  const seen = new Set<string>(); // Mover declaração para fora do try para ser acessível no finally
 
   try {
     await page.goto(groupUrl, { waitUntil: "domcontentloaded" });
@@ -1394,7 +1395,6 @@ export async function testSelectors(options: SelectorTestOptions) {
       return;
     }
 
-    const seen = new Set<string>();
     let scrolls = 0;
     let shouldStop = false;
 
