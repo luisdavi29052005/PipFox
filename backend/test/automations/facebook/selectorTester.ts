@@ -16,8 +16,27 @@ function extractPostId(href: string | null): string | null {
   // Remove comment_id se presente na URL
   const cleanHref = href.split("?comment_id=")[0].split("&comment_id=")[0];
 
-  const m = cleanHref.match(/\/posts\/(\d+)|\/permalink\/(\d+)/);
-  return m ? m[1] || m[2] : cleanHref;
+  // Extrair ID real do post da URL
+  const patterns = [
+    /\/posts\/(\d+)/,           // /posts/1324430969031724
+    /\/permalink\/(\d+)/,       // /permalink/1324430969031724
+    /story_fbid=(\d+)/,         // story_fbid=1324430969031724
+    /\/groups\/\d+\/posts\/(\d+)/, // /groups/123/posts/1324430969031724
+    /\/groups\/\d+\/permalink\/(\d+)/ // /groups/123/permalink/1324430969031724
+  ];
+  
+  for (const pattern of patterns) {
+    const match = cleanHref.match(pattern);
+    if (match && match[1]) {
+      const extractedId = match[1];
+      // Validar que é um ID real (pelo menos 6 dígitos)
+      if (extractedId.length >= 6 && /^\d+$/.test(extractedId)) {
+        return extractedId;
+      }
+    }
+  }
+  
+  return null;
 }
 
 // Modal detection and auto-close functions for feed-only mode
@@ -995,258 +1014,262 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   let timeISO: string | null = null;
   let permalink: string | null = null;
 
-  // STRATEGY 1: Aggressive search for all post links (PRIORITY 1)
-  try {
-    console.log(`[parsePost] Post ${postId}: Strategy 1 - Searching for all post links`);
-    const allPostLinks = await contentContainer.locator('a[href*="/posts/"], a[href*="/permalink/"]').all();
-    
-    for (const link of allPostLinks) {
-      try {
-        const href = await link.getAttribute('href');
-        if (!href) continue;
+  // NOVA IMPLEMENTAÇÃO - Extração melhorada de permalink e timestamp
+  console.log(`[parsePost] Post ${postId}: Iniciando extração melhorada de permalink`);
+  
+  // Variável para armazenar o ID real extraído
+  let extractedPostId: string | null = null;
 
-        // Check if it's not a comment link with enhanced detection
-        const isCommentLink = await link.evaluate((el) => {
-          let parent = el.parentElement;
-          let depth = 0;
-          
-          while (parent && parent !== document.body && depth < 15) {
-            const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-            const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
-            const className = parent.className?.toLowerCase() || '';
-            
-            // Enhanced comment detection
-            if (ariaLabel.includes('comment') || 
-                ariaLabel.includes('comentário') ||
-                ariaLabel.includes('resposta') ||
-                ariaLabel.includes('reply') ||
-                dataTestId.includes('comment') ||
-                dataTestId.includes('reply') ||
-                className.includes('comment') ||
-                className.includes('reply')) {
-              return true;
-            }
-            
-            // Check for comment container patterns
-            if (parent.querySelector('[aria-label*="Comment"], [aria-label*="Comentário"], [data-testid*="comment"]')) {
-              const commentContainer = parent.querySelector('[aria-label*="Comment"], [aria-label*="Comentário"], [data-testid*="comment"]');
-              if (commentContainer?.contains(el)) {
-                return true;
-              }
-            }
-            
-            parent = parent.parentElement;
-            depth++;
-          }
-          return false;
-        });
-        
-        if (!isCommentLink) {
-          // Validate the permalink format
-          const urlPatterns = [
-            /\/posts\/\d+/,
-            /\/permalink\/\d+/,
-            /story_fbid=\d+/,
-            /\/groups\/\d+\/posts\/\d+/,
-            /\/groups\/\d+\/permalink\/\d+/
-          ];
-          
-          if (urlPatterns.some(pattern => pattern.test(href))) {
-            permalink = href;
-            console.log(`[parsePost] Post ${postId}: Permalink found via Strategy 1: ${href}`);
-            
-            // Also try to get timestamp from this element
-            try {
-              const linkTimeText = await link.innerText().catch(() => '');
-              const titleAttr = await link.getAttribute('title').catch(() => '');
-              
-              if (linkTimeText && linkTimeText.length > 0) {
-                timeText = linkTimeText.trim().replace(/\s+/g, ' ');
-                timeISO = parseTimestamp(timeText);
-              } else if (titleAttr && titleAttr.length > 0) {
-                timeText = titleAttr.trim().replace(/\s+/g, ' ');
-                timeISO = parseTimestamp(timeText);
-              }
-            } catch (e) {
-              // Continue without timestamp if we have permalink
-            }
-            break;
-          }
+  // Função auxiliar para extrair ID do post de uma URL
+  function extractPostIdFromUrl(url: string): string | null {
+    if (!url) return null;
+    
+    const patterns = [
+      /\/posts\/(\d+)/,
+      /\/permalink\/(\d+)/,
+      /story_fbid=(\d+)/,
+      /\/groups\/\d+\/posts\/(\d+)/,
+      /\/groups\/\d+\/permalink\/(\d+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        const id = match[1];
+        // Validar que é um ID real (pelo menos 6 dígitos)
+        if (id.length >= 6 && /^\d+$/.test(id)) {
+          return id;
         }
-      } catch (e) {
-        continue;
       }
     }
-  } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Strategy 1 failed`, e);
+    return null;
   }
 
-  // STRATEGY 2: Search relative to author (PRIORITY 2)
-  if (!permalink && authorUrl) {
-    try {
-      console.log(`[parsePost] Post ${postId}: Strategy 2 - Searching relative to author`);
-      const authorElements = await contentContainer.locator(`a[href="${authorUrl}"]`).all();
+  // Função auxiliar para construir permalink baseado no aria-posinset
+  function constructPermalinkFromPosinset(posinsetValue: string, currentUrl: string): string | null {
+    if (!posinsetValue || posinsetValue === 'unknown') return null;
+    
+    const groupIdMatch = currentUrl.match(/\/groups\/(\d+)/);
+    if (groupIdMatch && groupIdMatch[1]) {
+      const groupId = groupIdMatch[1];
+      return `https://www.facebook.com/groups/${groupId}/posts/${posinsetValue}`;
+    }
+    
+    return null;
+  }
+
+  // ESTRATÉGIA 1: Buscar links diretos de posts (mais específica e ampla)
+  try {
+    console.log(`[parsePost] Post ${postId}: Estratégia 1 - Links diretos`);
+    
+    const permalinkSelectors = [
+      // Priorizar seletores mais específicos para timestamps clicáveis
+      'span[data-testid="story-subtitle"] a[href*="/posts/"]',
+      'span[data-testid="story-subtitle"] a[href*="/permalink/"]',
+      'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]',
+      'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]',
+      // Links de timestamp em containers específicos
+      'abbr[title] a[href*="/posts/"]',
+      'abbr[title] a[href*="/permalink/"]',
+      'time[datetime] a[href*="/posts/"]',
+      'time[datetime] a[href*="/permalink/"]',
+      // Seletores mais genéricos como fallback
+      'a[href*="/posts/"]:not([href*="/comments/"]):not([href*="/photo/"])',
+      'a[href*="/permalink/"]:not([href*="/comments/"]):not([href*="/photo/"])',
+      'a[href*="story_fbid="]'
+    ];
+    
+    for (const selector of permalinkSelectors) {
+      const links = await contentContainer.locator(selector).all();
       
-      for (const authorElement of authorElements) {
+      for (const link of links) {
         try {
-          // Look for post links near the author element (within 3 levels up/down)
-          const searchSelectors = [
-            '.. a[href*="/posts/"], .. a[href*="/permalink/"]',
-            '../.. a[href*="/posts/"], ../.. a[href*="/permalink/"]',
-            '../../.. a[href*="/posts/"], ../../.. a[href*="/permalink/"]',
-            '+ * a[href*="/posts/"], + * a[href*="/permalink/"]',
-            '~ * a[href*="/posts/"], ~ * a[href*="/permalink/"]'
-          ];
+          const href = await link.getAttribute('href');
+          if (!href) continue;
           
-          for (const selector of searchSelectors) {
-            try {
-              const nearbyLinks = await authorElement.locator(selector).all();
-              for (const link of nearbyLinks) {
-                const href = await link.getAttribute('href');
-                if (href && (href.includes('/posts/') || href.includes('/permalink/'))) {
-                  // Validate URL pattern
-                  const urlPatterns = [
-                    /\/posts\/\d+/,
-                    /\/permalink\/\d+/,
-                    /story_fbid=\d+/,
-                    /\/groups\/\d+\/posts\/\d+/,
-                    /\/groups\/\d+\/permalink\/\d+/
-                  ];
-                  
-                  if (urlPatterns.some(pattern => pattern.test(href))) {
-                    permalink = href;
-                    console.log(`[parsePost] Post ${postId}: Permalink found via Strategy 2: ${href}`);
-                    break;
-                  }
-                }
+          // Verificar se não é um link de comentário
+          const isCommentLink = await link.evaluate((el) => {
+            let parent = el.parentElement;
+            let depth = 0;
+            
+            while (parent && parent !== document.body && depth < 10) {
+              const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+              const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+              
+              if (ariaLabel.includes('comment') || 
+                  ariaLabel.includes('comentário') ||
+                  dataTestId.includes('comment')) {
+                return true;
               }
-              if (permalink) break;
-            } catch (e) {
-              continue;
+              
+              parent = parent.parentElement;
+              depth++;
+            }
+            return false;
+          });
+          
+          if (!isCommentLink) {
+            const extractedId = extractPostIdFromUrl(href);
+            
+            // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
+            if (extractedId && 
+                extractedId !== postId && 
+                extractedId.length >= 6 && 
+                /^\d+$/.test(extractedId)) {
+              
+              permalink = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+              extractedPostId = extractedId; // Armazenar o ID real
+              
+              // Tentar extrair timestamp do mesmo elemento
+              try {
+                const linkText = await link.innerText().catch(() => '');
+                const titleAttr = await link.getAttribute('title').catch(() => '');
+                
+                if (linkText && linkText.trim().length > 0 && linkText.trim().length < 50) {
+                  timeText = linkText.trim();
+                  timeISO = parseTimestamp(timeText);
+                } else if (titleAttr && titleAttr.trim().length > 0) {
+                  timeText = titleAttr.trim();
+                  timeISO = parseTimestamp(timeText);
+                }
+              } catch (e) {
+                // Continuar mesmo sem timestamp
+              }
+              
+              console.log(`[parsePost] Post ${postId}: Permalink encontrado via Estratégia 1: ${permalink} (ID real: ${extractedId})`);
+              break;
+            } else {
+              console.log(`[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`);
             }
           }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (permalink) break;
+    }
+  } catch (e) {
+    console.warn(`[parsePost] Post ${postId}: Estratégia 1 falhou`, e);
+  }
+
+  // ESTRATÉGIA 2: Buscar elementos de timestamp que contêm permalink (expandida)
+  if (!permalink) {
+    try {
+      console.log(`[parsePost] Post ${postId}: Estratégia 2 - Elementos de timestamp`);
+      
+      const timestampSelectors = [
+        // Priorizar seletores mais específicos para timestamps
+        'span[data-testid="story-subtitle"] a',
+        'div[data-ad-rendering-role="profile_name"] ~ div a',
+        'div[role="heading"] ~ div a[href*="/posts/"]',
+        'div[role="heading"] ~ div a[href*="/permalink/"]',
+        'time[datetime] a',
+        'abbr[title] a',
+        'span[role="presentation"] a',
+        // Adicionar mais seletores específicos
+        'a[aria-label]:not([aria-label*="comment"]):not([aria-label*="comentário"])[href*="/posts/"]',
+        'a[aria-label]:not([aria-label*="comment"]):not([aria-label*="comentário"])[href*="/permalink/"]',
+        // Seletores para posts em grupos específicos
+        'div[aria-labelledby] a[href*="/posts/"]',
+        'div[aria-labelledby] a[href*="/permalink/"]'
+      ];
+      
+      for (const selector of timestampSelectors) {
+        try {
+          const timestampElements = await contentContainer.locator(selector).all();
+          
+          for (const timestampEl of timestampElements) {
+            const href = await timestampEl.getAttribute('href');
+            if (href && (href.includes('/posts/') || href.includes('/permalink/'))) {
+              // Verificar se não é comentário
+              const isCommentLink = await timestampEl.evaluate((el) => {
+                let parent = el.parentElement;
+                let depth = 0;
+                while (parent && parent !== document.body && depth < 8) {
+                  const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
+                  if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+                    return true;
+                  }
+                  parent = parent.parentElement;
+                  depth++;
+                }
+                return false;
+              });
+              
+              if (!isCommentLink) {
+                const extractedId = extractPostIdFromUrl(href);
+                
+                // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
+                if (extractedId && 
+                    extractedId !== postId && 
+                    extractedId.length >= 6 && 
+                    /^\d+$/.test(extractedId)) {
+                  
+                  permalink = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+                  extractedPostId = extractedId; // Armazenar o ID real
+                  
+                  // Extrair timestamp
+                  try {
+                    const timestampText = await timestampEl.innerText().catch(() => '');
+                    const titleAttr = await timestampEl.getAttribute('title').catch(() => '');
+                    
+                    if (timestampText && timestampText.trim().length > 0) {
+                      timeText = timestampText.trim();
+                      timeISO = parseTimestamp(timeText);
+                    } else if (titleAttr && titleAttr.trim().length > 0) {
+                      timeText = titleAttr.trim();
+                      timeISO = parseTimestamp(timeText);
+                    }
+                  } catch (e) {
+                    // Continuar mesmo sem timestamp
+                  }
+                  
+                  console.log(`[parsePost] Post ${postId}: Permalink encontrado via Estratégia 2: ${permalink} (ID real: ${extractedId})`);
+                  break;
+                } else {
+                  console.log(`[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`);
+                }
+              }
+            }
+          }
+          
           if (permalink) break;
         } catch (e) {
           continue;
         }
       }
     } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Strategy 2 failed`, e);
+      console.warn(`[parsePost] Post ${postId}: Estratégia 2 falhou`, e);
     }
   }
 
-  // STRATEGY 3: JavaScript-based search (PRIORITY 3)
+  // ESTRATÉGIA 3: Busca mais agressiva por elementos clicáveis com timestamp
   if (!permalink) {
     try {
-      console.log(`[parsePost] Post ${postId}: Strategy 3 - JavaScript-based search`);
-      const foundPermalink = await contentContainer.evaluate(() => {
-        const allLinks = Array.from(document.querySelectorAll('a[href]'));
-        
-        for (const link of allLinks) {
-          const href = link.getAttribute('href');
-          if (href && (href.includes('/posts/') || href.includes('/permalink/'))) {
-            // Enhanced comment detection in JavaScript
-            let parent = link.parentElement;
-            let isInComment = false;
-            let depth = 0;
-            
-            while (parent && parent !== document.body && depth < 15) {
-              const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-              const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
-              const className = parent.className?.toLowerCase() || '';
-              
-              if (ariaLabel.includes('comment') || 
-                  ariaLabel.includes('comentário') ||
-                  ariaLabel.includes('resposta') ||
-                  ariaLabel.includes('reply') ||
-                  dataTestId.includes('comment') ||
-                  dataTestId.includes('reply') ||
-                  className.includes('comment') ||
-                  className.includes('reply')) {
-                isInComment = true;
-                break;
-              }
-              
-              parent = parent.parentElement;
-              depth++;
-            }
-            
-            if (!isInComment) {
-              // Validate URL pattern
-              const urlPatterns = [
-                /\/posts\/\d+/,
-                /\/permalink\/\d+/,
-                /story_fbid=\d+/,
-                /\/groups\/\d+\/posts\/\d+/,
-                /\/groups\/\d+\/permalink\/\d+/
-              ];
-              
-              if (urlPatterns.some(pattern => pattern.test(href))) {
-                return href;
-              }
-            }
-          }
-        }
-        
-        return null;
-      });
-
-      if (foundPermalink) {
-        permalink = foundPermalink;
-        console.log(`[parsePost] Post ${postId}: Permalink found via Strategy 3: ${foundPermalink}`);
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Strategy 3 failed`, e);
-    }
-  }
-
-  // STRATEGY 4: Construct permalink from aria-posinset (PRIORITY 4)
-  if (!permalink) {
-    try {
-      console.log(`[parsePost] Post ${postId}: Strategy 4 - Constructing from aria-posinset`);
-      const posinsetValue = await postLocator.getAttribute('aria-posinset');
+      console.log(`[parsePost] Post ${postId}: Estratégia 3 - Busca agressiva por timestamps clicáveis`);
       
-      if (posinsetValue && posinsetValue !== 'unknown') {
-        // Try to extract group ID from the current URL or group context
-        const currentUrl = await postLocator.page().url();
-        const groupIdMatch = currentUrl.match(/\/groups\/(\d+)/);
-        
-        if (groupIdMatch) {
-          const groupId = groupIdMatch[1];
-          // Facebook group post permalink pattern
-          permalink = `https://www.facebook.com/groups/${groupId}/posts/${posinsetValue}`;
-          console.log(`[parsePost] Post ${postId}: Permalink constructed via Strategy 4: ${permalink}`);
-        }
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Strategy 4 failed`, e);
-    }
-  }
-
-  // STRATEGY 5: Try original timestamp strategies as fallback (PRIORITY 5)
-  if (!timeText || !permalink) {
-    try {
-      console.log(`[parsePost] Post ${postId}: Strategy 5 - Original timestamp strategies`);
-      const timestampStrategies = [
-        'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/posts/"]',
-        'div[data-ad-rendering-role="profile_name"] ~ div a[href*="/permalink/"]',
-        'span[data-testid="story-subtitle"] a',
-        'div[data-pagelet="FeedUnit"] [role="article"] span[role="presentation"] a',
-        'a[href*="/groups/"][href*="/permalink/"], a[href*="/groups/"][href*="/posts/"]',
-        'span > a[href*="/posts/"]',
-        'span > a[href*="/permalink/"]'
-      ];
-
-      for (const strategy of timestampStrategies) {
+      // Buscar QUALQUER link que contenha posts/ ou permalink/ no container do post
+      const allLinks = await contentContainer.locator('a[href]').all();
+      
+      for (const link of allLinks) {
         try {
-          const timestampLoc = contentContainer.locator(strategy).first();
-          if (await timestampLoc.isVisible({ timeout: 500 })) {
-            const isInComment = await timestampLoc.evaluate((el) => {
+          const href = await link.getAttribute('href');
+          if (!href) continue;
+          
+          // Verificar se é um link de post/permalink
+          if (href.includes('/posts/') || href.includes('/permalink/') || href.includes('story_fbid=')) {
+            // Verificar se não é comentário
+            const isCommentLink = await link.evaluate((el) => {
               let parent = el.parentElement;
               let depth = 0;
               while (parent && parent !== document.body && depth < 10) {
                 const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-                if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+                const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+                
+                if (ariaLabel.includes('comment') || 
+                    ariaLabel.includes('comentário') ||
+                    dataTestId.includes('comment')) {
                   return true;
                 }
                 parent = parent.parentElement;
@@ -1254,28 +1277,43 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
               }
               return false;
             });
-
-            if (!isInComment) {
-              const linkHref = await timestampLoc.getAttribute("href");
-              if (linkHref && !permalink) {
-                permalink = linkHref;
-              }
+            
+            if (!isCommentLink) {
+              const extractedId = extractPostIdFromUrl(href);
               
-              if (!timeText) {
-                let rawTimeText = await timestampLoc.innerText().catch(() => '');
-                if (!rawTimeText) {
-                  rawTimeText = await timestampLoc.getAttribute('title').catch(() => '') || '';
+              // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
+              if (extractedId && 
+                  extractedId !== postId && 
+                  extractedId.length >= 6 && 
+                  /^\d+$/.test(extractedId)) {
+                
+                permalink = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+                extractedPostId = extractedId; // Armazenar o ID real
+                
+                // Tentar extrair timestamp
+                try {
+                  const linkText = await link.innerText().catch(() => '');
+                  const titleAttr = await link.getAttribute('title').catch(() => '');
+                  
+                  if (linkText && linkText.trim().length > 0 && linkText.trim().length < 50) {
+                    // Verificar se parece com timestamp
+                    const timestampPattern = /(\d+[hms]|\d+:\d+|hoje|ontem|yesterday|today|hora|min|dia)/i;
+                    if (timestampPattern.test(linkText)) {
+                      timeText = linkText.trim();
+                      timeISO = parseTimestamp(timeText);
+                    }
+                  } else if (titleAttr && titleAttr.trim().length > 0) {
+                    timeText = titleAttr.trim();
+                    timeISO = parseTimestamp(timeText);
+                  }
+                } catch (e) {
+                  // Continuar mesmo sem timestamp
                 }
                 
-                if (rawTimeText) {
-                  timeText = rawTimeText.trim().replace(/\s+/g, ' ');
-                  timeISO = parseTimestamp(timeText);
-                }
-              }
-              
-              if (permalink) {
-                console.log(`[parsePost] Post ${postId}: Found via Strategy 5 "${strategy}"`);
+                console.log(`[parsePost] Post ${postId}: Permalink encontrado via Estratégia 3: ${permalink} (ID real: ${extractedId})`);
                 break;
+              } else {
+                console.log(`[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`);
               }
             }
           }
@@ -1284,58 +1322,93 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         }
       }
     } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Strategy 5 failed`, e);
+      console.warn(`[parsePost] Post ${postId}: Estratégia 3 falhou`, e);
     }
   }
 
-  // STRATEGY 6: Extract timestamp from text patterns if still missing
+  // ESTRATÉGIA 4: Buscar timestamp via padrões de texto se ainda não encontrado
   if (!timeText) {
     try {
+      console.log(`[parsePost] Post ${postId}: Estratégia 4 - Extração de timestamp via padrões`);
+      
+      const contentText = await contentContainer.innerText().catch(() => '');
+      
       const timestampPatterns = [
         /\b(\d{1,2}:\d{2}(?:\s*[AP]M)?)\b/i,
-        /\b(Today|Ontem)\s+at\s+(\d{1,2}:\d{2})/i,
-        /\b([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?(?:, \d{4})?)\b/,
-        /\b(\d{1,2}h|\d{1,2}\s*hora|\d{1,2}\s*min|\d{1,2}\s*dia)\b/i
+        /\b(hoje|today)\s+(?:às|at)\s+(\d{1,2}:\d{2})/i,
+        /\b(ontem|yesterday)\s+(?:às|at)\s+(\d{1,2}:\d{2})/i,
+        /\b(\d{1,2}h)\b/i,
+        /\b(\d{1,2}\s*min)\b/i,
+        /\b(\d{1,2}\s*dia)\b/i,
+        /\b([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?)\b/,
+        /\b(\d{1,2} de [A-Za-z]+)\b/i
       ];
       
-      const contentText = await contentContainer.innerText();
       for (const pattern of timestampPatterns) {
         const match = contentText.match(pattern);
-        if (match) {
-          timeText = match[0];
-          timeISO = parseTimestamp(timeText);
-          if (timeISO) {
-            console.log(`[parsePost] Post ${postId}: Timestamp found via pattern: "${timeText}"`);
+        if (match && match[1]) {
+          const candidateTimeText = match[1].trim();
+          const parsedTime = parseTimestamp(candidateTimeText);
+          
+          if (parsedTime) {
+            timeText = candidateTimeText;
+            timeISO = parsedTime;
+            console.log(`[parsePost] Post ${postId}: Timestamp encontrado via padrão: "${timeText}"`);
             break;
           }
         }
       }
     } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Pattern matching failed`, e);
+      console.warn(`[parsePost] Post ${postId}: Estratégia 4 falhou`, e);
+    }
+  }
+
+  // ESTRATÉGIA 4: Fallback - usar aria-posinset APENAS se não encontrou nada
+  if (!permalink) {
+    try {
+      console.log(`[parsePost] Post ${postId}: Estratégia 4 FALLBACK - Construção via aria-posinset (não recomendado)`);
+      
+      const posinsetValue = await postLocator.getAttribute('aria-posinset');
+      const currentUrl = await postLocator.page().url();
+      
+      if (posinsetValue && posinsetValue !== 'unknown') {
+        const constructedPermalink = constructPermalinkFromPosinset(posinsetValue, currentUrl);
+        
+        if (constructedPermalink) {
+          permalink = constructedPermalink;
+          extractedPostId = posinsetValue;
+          console.warn(`[parsePost] Post ${postId}: ATENÇÃO - Usando permalink construído (pode não ser o ID real): ${permalink}`);
+        }
+      }
+    } catch (e) {
+      console.warn(`[parsePost] Post ${postId}: Estratégia 4 falhou`, e);
     }
   }
 
   // Log final results
-  console.log(`[parsePost] Post ${postId}: Final extraction results - Permalink: ${permalink ? '✅' : '❌'}, Timestamp: ${timeText ? '✅' : '❌'}`);
+  const isRealId = extractedPostId && extractedPostId !== postId && extractedPostId.length >= 6 && /^\d+$/.test(extractedPostId);
+  
+  console.log(`[parsePost] Post ${postId}: Extração concluída - Resultados finais:`, {
+    ariaPosinset: postId,
+    extractedPostId: extractedPostId,
+    permalink: permalink ? '✅' : '❌',
+    timeText: timeText ? '✅' : '❌',
+    timeISO: timeISO ? '✅' : '❌',
+    permalinkUrl: permalink,
+    isRealId: isRealId
+  });
+  
   if (!permalink) {
-    console.error(`[parsePost] Post ${postId}: CRITICAL - No permalink found with any strategy!`);
-  }
-
-  // Extract post ID from permalink if available
-  let extractedPostId = postId;
-  if (permalink) {
-    const postIdMatch = permalink.match(
-      /\/posts\/(\d+)|\/permalink\/(\d+)|story_fbid=(\d+)/,
-    );
-    if (postIdMatch) {
-      extractedPostId =
-        postIdMatch[1] || postIdMatch[2] || postIdMatch[3] || postId;
-    }
+    console.error(`[parsePost] Post ${postId}: CRITICAL - Nenhum permalink encontrado com nenhuma estratégia!`);
+  } else if (!isRealId) {
+    console.warn(`[parsePost] Post ${postId}: ⚠️ Permalink não é real (usando aria-posinset): ${permalink}`);
+  } else {
+    console.log(`[parsePost] Post ${postId}: ✅ Permalink extraído com sucesso: ${permalink} (ID real: ${extractedPostId})`);
   }
 
   const result: PostData = {
-    postId: extractedPostId,
-    permalink,
+    postId: extractedPostId, // Usar o ID real extraído do href, ou null se não encontrou
+    permalink: permalink, // Usar o permalink encontrado, ou null se não encontrou
     authorName,
     authorUrl,
     timeISO,
