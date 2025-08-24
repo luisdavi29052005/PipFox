@@ -280,7 +280,7 @@ if (require.main === module) {
     }
 
     // Parse max-posts option
-    const maxPosts = options['max-posts'] ? parseInt(options['max-posts']) : 5;
+    const maxPosts = options['max-posts'] ? parseInt(options['max-posts']) : 500;
     const headless = options['headless'] === 'true';
 
     let tests: ('login' | 'selectors' | 'health')[] = ['login', 'health', 'selectors'];
