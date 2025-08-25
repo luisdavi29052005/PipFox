@@ -2,8 +2,8 @@ import { chromium, BrowserContext, Page, Locator } from "playwright";
 import { openContextForAccount } from "../../../src/core/automations/facebook/session/context";
 import { processPostWithN8n } from "./helpers/n8nIntegration";
 import { postComment } from "../../../src/core/automations/facebook/actions/postComment";
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 // ===== Helpers =====
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -16,26 +16,38 @@ function extractPostId(href: string | null): string | null {
   // Remove comment_id se presente na URL
   const cleanHref = href.split("?comment_id=")[0].split("&comment_id=")[0];
 
-  // Extrair ID real do post da URL
+  // Padrões para extrair ID real do post da URL (ordem de prioridade)
   const patterns = [
-    /\/posts\/(\d+)/,           // /posts/1324430969031724
-    /\/permalink\/(\d+)/,       // /permalink/1324430969031724
-    /story_fbid=(\d+)/,         // story_fbid=1324430969031724
-    /\/groups\/\d+\/posts\/(\d+)/, // /groups/123/posts/1324430969031724
-    /\/groups\/\d+\/permalink\/(\d+)/ // /groups/123/permalink/1324430969031724
+    // Padrão específico para grupos com set=gm.{ID} - PRIORIDADE ALTA
+    /set=gm\.(\d+)/, // set=gm.1324567052351449
+    
+    // Padrões tradicionais de posts em grupos
+    /\/groups\/\d+\/posts\/(\d+)/, // /groups/123/posts/1324567052351449
+    /\/groups\/\d+\/permalink\/(\d+)/, // /groups/123/permalink/1324567052351449
+    
+    // Padrões gerais
+    /\/posts\/(\d+)/, // /posts/1324567052351449
+    /\/permalink\/(\d+)/, // /permalink/1324567052351449
+    /story_fbid=(\d+)/, // story_fbid=1324567052351449
+    
+    // Padrões para URLs de foto que contêm o ID do post
+    /\/photo\/[^\/]*\/\?.*story_fbid=(\d+)/, // URLs de foto com story_fbid
+    /\/photo.*set=gm\.(\d+)/, // URLs de foto com set=gm.{ID}
   ];
 
   for (const pattern of patterns) {
     const match = cleanHref.match(pattern);
     if (match && match[1]) {
       const extractedId = match[1];
-      // Validar que é um ID real (pelo menos 6 dígitos)
-      if (extractedId.length >= 6 && /^\d+$/.test(extractedId)) {
+      // Validar que é um ID global real (pelo menos 10 dígitos para IDs globais)
+      if (extractedId.length >= 10 && /^\d+$/.test(extractedId)) {
+        console.log(`✅ ID global extraído: ${extractedId} via padrão: ${pattern}`);
         return extractedId;
       }
     }
   }
 
+  console.log(`⚠️ Nenhum ID global encontrado em: ${cleanHref}`);
   return null;
 }
 
@@ -49,7 +61,7 @@ async function detectAndCloseModal(page: Page): Promise<boolean> {
       'div[data-pagelet="PhotoViewerModal"]',
       'div[data-pagelet="MediaViewerModal"]',
       'div[class*="modal"]',
-      '.fbPhotosPhotoPageModal'
+      ".fbPhotosPhotoPageModal",
     ];
 
     let modalFound = false;
@@ -69,7 +81,7 @@ async function detectAndCloseModal(page: Page): Promise<boolean> {
           'div[role="button"][aria-label="Fechar"]',
           'div[role="button"][aria-label="Close"]',
           'svg[aria-label="Fechar"]',
-          'svg[aria-label="Close"]'
+          'svg[aria-label="Close"]',
         ];
 
         let closed = false;
@@ -79,7 +91,9 @@ async function detectAndCloseModal(page: Page): Promise<boolean> {
             if (await closeBtn.isVisible({ timeout: 500 })) {
               await closeBtn.click();
               await sleep(500);
-              console.log(`[detectAndCloseModal] Modal fechado com: ${closeSelector}`);
+              console.log(
+                `[detectAndCloseModal] Modal fechado com: ${closeSelector}`,
+              );
               closed = true;
               break;
             }
@@ -91,7 +105,7 @@ async function detectAndCloseModal(page: Page): Promise<boolean> {
         // Fallback: ESC key
         if (!closed) {
           console.log(`[detectAndCloseModal] Tentando fechar modal com ESC`);
-          await page.keyboard.press('Escape');
+          await page.keyboard.press("Escape");
           await sleep(500);
         }
 
@@ -183,7 +197,7 @@ export type PostData = {
   text: string | null;
   imageUrls: string[];
   videoUrls: string[];
-  externalLinks: Array<{url: string; text: string; domain: string}>;
+  externalLinks: Array<{ url: string; text: string; domain: string }>;
 };
 
 // Robust timestamp parser following document guidelines
@@ -192,7 +206,7 @@ function parseTimestamp(rawTimestamp: string): string | null {
 
   try {
     // Normalize the timestamp
-    let normalized = rawTimestamp.trim().replace(/\s+/g, ' ');
+    let normalized = rawTimestamp.trim().replace(/\s+/g, " ");
 
     // Handle relative timestamps like "4h", "2d", "1min"
     const relativeMatch = normalized.match(
@@ -228,16 +242,18 @@ function parseTimestamp(rawTimestamp: string): string | null {
     }
 
     // Handle "Today at HH:MM" format
-    const todayMatch = normalized.match(/Today at (\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    const todayMatch = normalized.match(
+      /Today at (\d{1,2}):(\d{2})\s*(AM|PM)?/i,
+    );
     if (todayMatch) {
       const hour = parseInt(todayMatch[1]);
       const minute = parseInt(todayMatch[2]);
       const period = todayMatch[3];
 
       let adjustedHour = hour;
-      if (period && period.toLowerCase() === 'pm' && hour < 12) {
+      if (period && period.toLowerCase() === "pm" && hour < 12) {
         adjustedHour = hour + 12;
-      } else if (period && period.toLowerCase() === 'am' && hour === 12) {
+      } else if (period && period.toLowerCase() === "am" && hour === 12) {
         adjustedHour = 0;
       }
 
@@ -247,16 +263,18 @@ function parseTimestamp(rawTimestamp: string): string | null {
     }
 
     // Handle "Yesterday at HH:MM" format
-    const yesterdayMatch = normalized.match(/Yesterday at (\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    const yesterdayMatch = normalized.match(
+      /Yesterday at (\d{1,2}):(\d{2})\s*(AM|PM)?/i,
+    );
     if (yesterdayMatch) {
       const hour = parseInt(yesterdayMatch[1]);
       const minute = parseInt(yesterdayMatch[2]);
       const period = yesterdayMatch[3];
 
       let adjustedHour = hour;
-      if (period && period.toLowerCase() === 'pm' && hour < 12) {
+      if (period && period.toLowerCase() === "pm" && hour < 12) {
         adjustedHour = hour + 12;
-      } else if (period && period.toLowerCase() === 'am' && hour === 12) {
+      } else if (period && period.toLowerCase() === "am" && hour === 12) {
         adjustedHour = 0;
       }
 
@@ -267,7 +285,9 @@ function parseTimestamp(rawTimestamp: string): string | null {
     }
 
     // Handle "Month Day at HH:MM" format (e.g., "Jun 15 at 10:30 AM")
-    const monthDayMatch = normalized.match(/([A-Za-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/);
+    const monthDayMatch = normalized.match(
+      /([A-Za-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/,
+    );
     if (monthDayMatch) {
       const monthName = monthDayMatch[1];
       const day = parseInt(monthDayMatch[2]);
@@ -275,15 +295,40 @@ function parseTimestamp(rawTimestamp: string): string | null {
       const minute = parseInt(monthDayMatch[4]);
       const period = monthDayMatch[5];
 
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNames = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       let month = monthNames.indexOf(monthName.substring(0, 3));
 
       if (month === -1) {
         // Try full month names
-        const fullMonthNames = ["January", "February", "March", "April", "May", "June",
-                               "July", "August", "September", "October", "November", "December"];
-        month = fullMonthNames.findIndex(name =>
-          name.toLowerCase().startsWith(monthName.toLowerCase())
+        const fullMonthNames = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
+        ];
+        month = fullMonthNames.findIndex((name) =>
+          name.toLowerCase().startsWith(monthName.toLowerCase()),
         );
       }
 
@@ -292,34 +337,62 @@ function parseTimestamp(rawTimestamp: string): string | null {
       }
 
       let adjustedHour = hour;
-      if (period && period.toLowerCase() === 'pm' && hour < 12) {
+      if (period && period.toLowerCase() === "pm" && hour < 12) {
         adjustedHour = hour + 12;
-      } else if (period && period.toLowerCase() === 'am' && hour === 12) {
+      } else if (period && period.toLowerCase() === "am" && hour === 12) {
         adjustedHour = 0;
       }
 
       const now = new Date();
-      const year = now.getMonth() > month ? now.getFullYear() : now.getFullYear() - 1;
+      const year =
+        now.getMonth() > month ? now.getFullYear() : now.getFullYear() - 1;
 
       const date = new Date(year, month, day, adjustedHour, minute);
       return date.toISOString();
     }
 
     // Handle "Month Day, Year" format (e.g., "Jun 15, 2023")
-    const monthDayYearMatch = normalized.match(/([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/);
+    const monthDayYearMatch = normalized.match(
+      /([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/,
+    );
     if (monthDayYearMatch) {
       const monthName = monthDayYearMatch[1];
       const day = parseInt(monthDayYearMatch[2]);
       const year = parseInt(monthDayYearMatch[3]);
 
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNames = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       let month = monthNames.indexOf(monthName.substring(0, 3));
 
       if (month === -1) {
-        const fullMonthNames = ["January", "February", "March", "April", "May", "June",
-                               "July", "August", "September", "October", "November", "December"];
-        month = fullMonthNames.findIndex(name =>
-          name.toLowerCase().startsWith(monthName.toLowerCase())
+        const fullMonthNames = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
+        ];
+        month = fullMonthNames.findIndex((name) =>
+          name.toLowerCase().startsWith(monthName.toLowerCase()),
         );
       }
 
@@ -339,9 +412,9 @@ function parseTimestamp(rawTimestamp: string): string | null {
       const period = timeOnlyMatch[3];
 
       let adjustedHour = hour;
-      if (period.toLowerCase() === 'pm' && hour < 12) {
+      if (period.toLowerCase() === "pm" && hour < 12) {
         adjustedHour = hour + 12;
-      } else if (period.toLowerCase() === 'am' && hour === 12) {
+      } else if (period.toLowerCase() === "am" && hour === 12) {
         adjustedHour = 0;
       }
 
@@ -389,7 +462,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
     'div[role="article"] > div > div > div > div > div',
 
     // Strategy 5: Fallback for newer Facebook layouts
-    'div[data-pagelet="FeedUnit"] > div > div > div > div > div > div > div > div > div'
+    'div[data-pagelet="FeedUnit"] > div > div > div > div > div > div > div > div > div',
   ];
 
   for (const strategy of containerStrategies) {
@@ -401,15 +474,21 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
           let parent = el.parentElement;
           while (parent && parent !== document.body) {
             // Check for comment-specific attributes
-            const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-            const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+            const ariaLabel =
+              parent.getAttribute("aria-label")?.toLowerCase() || "";
+            const dataTestId =
+              parent.getAttribute("data-testid")?.toLowerCase() || "";
 
-            if (ariaLabel.includes('comment') ||
-                ariaLabel.includes('comentário') ||
-                dataTestId.includes('comment') ||
-                dataTestId.includes('comentário') ||
-                parent.classList.contains('comment') ||
-                parent.querySelector('[aria-label*="Comment"], [aria-label*="Comentário"]')) {
+            if (
+              ariaLabel.includes("comment") ||
+              ariaLabel.includes("comentário") ||
+              dataTestId.includes("comment") ||
+              dataTestId.includes("comentário") ||
+              parent.classList.contains("comment") ||
+              parent.querySelector(
+                '[aria-label*="Comment"], [aria-label*="Comentário"]',
+              )
+            ) {
               return true;
             }
             parent = parent.parentElement;
@@ -419,7 +498,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
         if (!isCommentContainer) {
           contentContainer = container;
-          console.log(`[parsePost] Using content container strategy: ${strategy}`);
+          console.log(
+            `[parsePost] Using content container strategy: ${strategy}`,
+          );
           break;
         }
       }
@@ -431,13 +512,17 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   // Fallback if no strategy worked
   if (!contentContainer) {
     // Try to find the main content by excluding comments
-    const allDivs = await postLocator.locator('> div').all();
+    const allDivs = await postLocator.locator("> div").all();
     for (const div of allDivs) {
       const isComment = await div.evaluate((el) => {
         let parent = el.parentElement;
         while (parent && parent !== document.body) {
-          const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-          if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+          const ariaLabel =
+            parent.getAttribute("aria-label")?.toLowerCase() || "";
+          if (
+            ariaLabel.includes("comment") ||
+            ariaLabel.includes("comentário")
+          ) {
             return true;
           }
           parent = parent.parentElement;
@@ -447,7 +532,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
       if (!isComment) {
         contentContainer = div;
-        console.warn(`[parsePost] Post ${postId}: Using div-based fallback content container`);
+        console.warn(
+          `[parsePost] Post ${postId}: Using div-based fallback content container`,
+        );
         break;
       }
     }
@@ -456,7 +543,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   // Final fallback
   if (!contentContainer) {
     contentContainer = postLocator;
-    console.error(`[parsePost] Post ${postId}: Using postLocator as fallback content container - may include comments`);
+    console.error(
+      `[parsePost] Post ${postId}: Using postLocator as fallback content container - may include comments`,
+    );
   }
 
   // Step 2: Extract author information with multiple strategies (CRITICAL IMPROVEMENT)
@@ -472,7 +561,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       'div[data-ad-comet-preview="story"][data-ad-preview="story"] a[href*="/groups/"][role="link"]:not([href*="/permalink/"]):not([href*="/posts/"])',
 
       // Strategy 3: Common header patterns
-      'h2 a, h3 a, h4 a',
+      "h2 a, h3 a, h4 a",
 
       // Strategy 4: Facebook's newer patterns
       'span[data-testid="story-subtitle"] a[href*="/user/"], span[data-testid="story-subtitle"] a[href*="/profile.php"]',
@@ -493,7 +582,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       'a[href*="/groups/"][href*="/user/"], a[href*="/groups/"][href*="/profile.php"]',
 
       // Strategy 10: Author in group context without specific paths
-      'a[href*="/groups/"]:not([href*="/permalink/"]):not([href*="/posts/"]):not([href*="/photos/"])'
+      'a[href*="/groups/"]:not([href*="/permalink/"]):not([href*="/posts/"]):not([href*="/photos/"])',
     ];
 
     for (const strategy of authorStrategies) {
@@ -505,15 +594,21 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             let parent = el.parentElement;
             while (parent && parent !== document.body) {
               // Check for comment-specific attributes
-              const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-              const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+              const ariaLabel =
+                parent.getAttribute("aria-label")?.toLowerCase() || "";
+              const dataTestId =
+                parent.getAttribute("data-testid")?.toLowerCase() || "";
 
-              if (ariaLabel.includes('comment') ||
-                  ariaLabel.includes('comentário') ||
-                  dataTestId.includes('comment') ||
-                  dataTestId.includes('comentário') ||
-                  parent.classList.contains('comment') ||
-                  parent.querySelector('[aria-label*="Comment"], [aria-label*="Comentário"]')) {
+              if (
+                ariaLabel.includes("comment") ||
+                ariaLabel.includes("comentário") ||
+                dataTestId.includes("comment") ||
+                dataTestId.includes("comentário") ||
+                parent.classList.contains("comment") ||
+                parent.querySelector(
+                  '[aria-label*="Comment"], [aria-label*="Comentário"]',
+                )
+              ) {
                 return true;
               }
               parent = parent.parentElement;
@@ -526,18 +621,27 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             authorUrl = await authorLocator.getAttribute("href");
 
             // Additional validation for author name
-            if (authorName && authorName.trim().length > 0 &&
-                !authorName.includes('·') &&
-                !authorName.match(/^\d+$/) &&
-                !authorName.match(/(Curtir|Like|Comentar|Comment|Share|Compartilhar)/i) &&
-                authorName.length < 100) { // Reasonable name length
+            if (
+              authorName &&
+              authorName.trim().length > 0 &&
+              !authorName.includes("·") &&
+              !authorName.match(/^\d+$/) &&
+              !authorName.match(
+                /(Curtir|Like|Comentar|Comment|Share|Compartilhar)/i,
+              ) &&
+              authorName.length < 100
+            ) {
+              // Reasonable name length
 
               // Check if it looks like a name (has spaces or is a single reasonable word)
-              const isReasonableName = authorName.trim().includes(' ') ||
-                                      (authorName.trim().length > 2 && authorName.trim().length < 20);
+              const isReasonableName =
+                authorName.trim().includes(" ") ||
+                (authorName.trim().length > 2 && authorName.trim().length < 20);
 
               if (isReasonableName) {
-                console.log(`[parsePost] Author found with strategy "${strategy}": ${authorName}`);
+                console.log(
+                  `[parsePost] Author found with strategy "${strategy}": ${authorName}`,
+                );
                 break;
               }
             }
@@ -550,25 +654,32 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
     // If still no author found, try more aggressive search
     if (!authorName) {
-      const allLinks = await contentContainer.locator('a[href]').all();
+      const allLinks = await contentContainer.locator("a[href]").all();
       for (const link of allLinks) {
         try {
-          const href = await link.getAttribute('href');
+          const href = await link.getAttribute("href");
           let text = await link.innerText();
 
           // Clean up the text
-          text = text.trim().replace(/\s+/g, ' ');
+          text = text.trim().replace(/\s+/g, " ");
 
           // Check if it looks like a profile link
-          if (href && (href.includes('/user/') || href.includes('/profile.php') ||
-              (href.includes('/groups/') && !href.includes('/permalink/')))) {
-
+          if (
+            href &&
+            (href.includes("/user/") ||
+              href.includes("/profile.php") ||
+              (href.includes("/groups/") && !href.includes("/permalink/")))
+          ) {
             // Skip if it's a comment link
             const isCommentLink = await link.evaluate((el) => {
               let parent = el.parentElement;
               while (parent && parent !== document.body) {
-                const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-                if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+                const ariaLabel =
+                  parent.getAttribute("aria-label")?.toLowerCase() || "";
+                if (
+                  ariaLabel.includes("comment") ||
+                  ariaLabel.includes("comentário")
+                ) {
                   return true;
                 }
                 parent = parent.parentElement;
@@ -579,16 +690,23 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             if (isCommentLink) continue;
 
             // Check if text looks like a name (has spaces, reasonable length)
-            if (text && text.length > 2 && text.length < 50 &&
-                (text.includes(' ') || text.length > 3) && // Allow single names if they're reasonable
-                !text.includes('@') &&
-                !text.match(/(Curtir|Like|Comentar|Comment|Compartilhar|Share)/i) &&
-                !text.match(/^\d+$/) &&
-                !text.includes('·')) {
-
+            if (
+              text &&
+              text.length > 2 &&
+              text.length < 50 &&
+              (text.includes(" ") || text.length > 3) && // Allow single names if they're reasonable
+              !text.includes("@") &&
+              !text.match(
+                /(Curtir|Like|Comentar|Comment|Compartilhar|Share)/i,
+              ) &&
+              !text.match(/^\d+$/) &&
+              !text.includes("·")
+            ) {
               authorName = text;
               authorUrl = href;
-              console.log(`[parsePost] Author found with fallback strategy: ${authorName}`);
+              console.log(
+                `[parsePost] Author found with fallback strategy: ${authorName}`,
+              );
               break;
             }
           }
@@ -601,8 +719,10 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
     // Final fallback: Look for any text that looks like a name near the top of the post
     if (!authorName) {
       // Get all text elements in the post
-      const allTextElements = await contentContainer.locator('*').allInnerTexts();
-      const allText = allTextElements.join('\n');
+      const allTextElements = await contentContainer
+        .locator("*")
+        .allInnerTexts();
+      const allText = allTextElements.join("\n");
 
       // Look for patterns that might be names
       const namePatterns = [
@@ -613,33 +733,44 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         // Pattern for just a name at the beginning
         /^([\w\s.,-]+)\n/,
         // Pattern for group-specific author format
-        /(?:\bby\s+|por\s+|^)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/
+        /(?:\bby\s+|por\s+|^)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
       ];
 
       for (const pattern of namePatterns) {
         const match = allText.match(pattern);
         if (match && match[1]) {
           const potentialName = match[1].trim();
-          if (potentialName.length > 2 && potentialName.length < 50 &&
-              potentialName.split(' ').length <= 4) { // Reasonable name length and word count
+          if (
+            potentialName.length > 2 &&
+            potentialName.length < 50 &&
+            potentialName.split(" ").length <= 4
+          ) {
+            // Reasonable name length and word count
             authorName = potentialName;
-            console.log(`[parsePost] Author found with final fallback strategy: ${authorName}`);
+            console.log(
+              `[parsePost] Author found with final fallback strategy: ${authorName}`,
+            );
             break;
           }
         }
       }
     }
   } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Could not extract author information`, e);
+    console.warn(
+      `[parsePost] Post ${postId}: Could not extract author information`,
+      e,
+    );
   }
 
   // Step 3: Extract post text with multiple strategies
   let text: string | null = null;
-  let externalLinks: Array<{url: string; text: string; domain: string}> = [];
+  let externalLinks: Array<{ url: string; text: string; domain: string }> = [];
 
   try {
-    // SKIP "See More" expansion in feed-only mode to avoid opening modals
-    console.log(`[parsePost] Post ${postId}: Skipping "See More" expansion (feed-only mode)`);
+    // SKIP "See More" expansion in feed-only mode to avoid opening modais
+    console.log(
+      `[parsePost] Post ${postId}: Skipping "See More" expansion (feed-only mode)`,
+    );
 
     // Try multiple text extraction strategies with quality filtering
     const textSelectors = [
@@ -655,14 +786,14 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
       // More specific patterns for different post types
       'div[data-testid="post_message"] div[style*="line-height"]',
-      'div[data-uniqueid] > div > div > div > div > span > span',
+      "div[data-uniqueid] > div > div > div > div > span > span",
 
       // Group-specific patterns
       'div[data-pagelet="FeedUnit"] [role="article"] > div > div > div > div > div > div > div > div > span > span',
 
       // Fallback strategies
       'div[id^=":"] > div > div > div > div > div > div > span > span',
-      'div[role="article"] > div > div > div > div > div > div > div > span > span'
+      'div[role="article"] > div > div > div > div > div > div > div > span > span',
     ];
 
     // Function to check if text is meaningful (not random encoded strings)
@@ -685,7 +816,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         /^[a-zA-Z0-9]{40,}$/, // Very long random strings
         /^[a-zA-Z0-9]{20,}$/, // Medium random strings
         /^Mostrar mais$/, // "Show more" text
-        /^Show more$/
+        /^Show more$/,
       ];
 
       // Check if content matches any UI pattern
@@ -706,10 +837,12 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         const readablePatterns = [
           /[.!?]/, // Has punctuation
           /[aeiou]{2,}/i, // Has vowel clusters
-          /\b(the|and|or|but|with|for|at|by|from|to|of|in|on)\b/i // Common English words
+          /\b(the|and|or|but|with|for|at|by|from|to|of|in|on)\b/i, // Common English words
         ];
 
-        const hasReadablePattern = readablePatterns.some(pattern => pattern.test(trimmed));
+        const hasReadablePattern = readablePatterns.some((pattern) =>
+          pattern.test(trimmed),
+        );
         if (!hasReadablePattern) {
           return false;
         }
@@ -749,10 +882,14 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
               if (content.trim().length > maxLength) {
                 text = content.trim();
                 maxLength = content.trim().length;
-                console.log(`[parsePost] Post ${postId}: Valid text found via selector "${selector}": "${content.substring(0, 100)}..."`)
+                console.log(
+                  `[parsePost] Post ${postId}: Valid text found via selector "${selector}": "${content.substring(0, 100)}..."`,
+                );
               }
             } else if (content && content.trim().length > 10) {
-              console.log(`[parsePost] Post ${postId}: Rejected text (invalid): "${content.substring(0, 50)}..." via selector "${selector}"`)
+              console.log(
+                `[parsePost] Post ${postId}: Rejected text (invalid): "${content.substring(0, 50)}..." via selector "${selector}"`,
+              );
             }
           } catch (e) {
             continue;
@@ -775,8 +912,8 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             // Special case: Facebook short links that might be external
             if (href.includes("l.facebook.com/l.php?u=")) {
               try {
-                const urlParams = new URLSearchParams(href.split('?')[1]);
-                const externalUrl = urlParams.get('u');
+                const urlParams = new URLSearchParams(href.split("?")[1]);
+                const externalUrl = urlParams.get("u");
                 if (externalUrl) {
                   try {
                     const decodedUrl = decodeURIComponent(externalUrl);
@@ -784,7 +921,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                     externalLinks.push({
                       url: decodedUrl,
                       text: linkText.trim() || urlObj.hostname,
-                      domain: urlObj.hostname
+                      domain: urlObj.hostname,
                     });
                     continue;
                   } catch (e) {
@@ -792,7 +929,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                     externalLinks.push({
                       url: decodedUrl,
                       text: linkText.trim() || decodedUrl,
-                      domain: "facebook-redirect"
+                      domain: "facebook-redirect",
                     });
                     continue;
                   }
@@ -803,31 +940,39 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             }
 
             // Filter out Facebook internal links
-            const isFacebookLink = href.includes("facebook.com") ||
-                                 href.includes("fb.com") ||
-                                 href.includes("fb.watch") ||
-                                 href.includes("/groups/") ||
-                                 href.includes("/posts/") ||
-                                 href.includes("/permalink/") ||
-                                 href.includes("/photo/") ||
-                                 href.includes("/photos/");
+            const isFacebookLink =
+              href.includes("facebook.com") ||
+              href.includes("fb.com") ||
+              href.includes("fb.watch") ||
+              href.includes("/groups/") ||
+              href.includes("/posts/") ||
+              href.includes("/permalink/") ||
+              href.includes("/photo/") ||
+              href.includes("/photos/");
 
             // Include external links
             if (!isFacebookLink) {
               try {
-                const url = new URL(href.startsWith('http') ? href : `https://${href}`);
+                const url = new URL(
+                  href.startsWith("http") ? href : `https://${href}`,
+                );
                 externalLinks.push({
                   url: url.href,
                   text: linkText.trim() || url.hostname,
-                  domain: url.hostname
+                  domain: url.hostname,
                 });
               } catch (e) {
                 // If URL parsing fails, include as is if it looks like a URL
-                if (href.startsWith("http") || href.includes(".com") || href.includes(".net") || href.includes(".org")) {
+                if (
+                  href.startsWith("http") ||
+                  href.includes(".com") ||
+                  href.includes(".net") ||
+                  href.includes(".org")
+                ) {
                   externalLinks.push({
                     url: href,
                     text: linkText.trim() || href,
-                    domain: "unknown"
+                    domain: "unknown",
                   });
                 }
               }
@@ -845,17 +990,22 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         for (const url of textUrls) {
           try {
             const urlObj = new URL(url);
-            if (!urlObj.hostname.includes("facebook.com") && !urlObj.hostname.includes("fb.com")) {
+            if (
+              !urlObj.hostname.includes("facebook.com") &&
+              !urlObj.hostname.includes("fb.com")
+            ) {
               // Check if this URL is already in externalLinks
-              const alreadyAdded = externalLinks.some(link =>
-                link.url.includes(urlObj.hostname) || urlObj.hostname.includes(link.domain)
+              const alreadyAdded = externalLinks.some(
+                (link) =>
+                  link.url.includes(urlObj.hostname) ||
+                  urlObj.hostname.includes(link.domain),
               );
 
               if (!alreadyAdded) {
                 externalLinks.push({
                   url: url,
                   text: urlObj.hostname,
-                  domain: urlObj.hostname
+                  domain: urlObj.hostname,
                 });
               }
             }
@@ -873,35 +1023,44 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       const allText = await contentContainer.innerText({ timeout: 2000 });
       if (allText && allText.trim().length > 50) {
         // Filter out common Facebook UI elements
-        const lines = allText.split('\n').filter(line => {
+        const lines = allText.split("\n").filter((line) => {
           const trimmed = line.trim();
-          return trimmed.length > 10 &&
-                 !trimmed.match(/^\d+\s*(min|hora|dia|comentário|curtir|compartilhar)/i) &&
-                 !trimmed.includes('·') &&
-                 !trimmed.match(/^\d+$/) &&
-                 !trimmed.match(/^[a-zA-Z0-9]{20,}$/) &&
-                 !trimmed.match(/^s\d+[a-zA-Z0-9]+\.com/) &&
-                 trimmed !== 'Ver tradução' &&
-                 trimmed !== 'See translation' &&
-                 trimmed !== 'Mostrar mais' &&
-                 trimmed !== 'Show more';
+          return (
+            trimmed.length > 10 &&
+            !trimmed.match(
+              /^\d+\s*(min|hora|dia|comentário|curtir|compartilhar)/i,
+            ) &&
+            !trimmed.includes("·") &&
+            !trimmed.match(/^\d+$/) &&
+            !trimmed.match(/^[a-zA-Z0-9]{20,}$/) &&
+            !trimmed.match(/^s\d+[a-zA-Z0-9]+\.com/) &&
+            trimmed !== "Ver tradução" &&
+            trimmed !== "See translation" &&
+            trimmed !== "Mostrar mais" &&
+            trimmed !== "Show more"
+          );
         });
 
         // Additional filtering for meaningful content
-        const meaningfulLines = lines.filter(line => {
+        const meaningfulLines = lines.filter((line) => {
           const words = line.trim().split(/\s+/);
           const totalChars = line.trim().length;
           return words.length > 1 || (words.length === 1 && totalChars < 30);
         });
 
         if (meaningfulLines.length > 0) {
-          text = meaningfulLines.join(' ').trim();
-          console.log(`[parsePost] Post ${postId}: FALLBACK TEXT: "${text.substring(0, 100)}..."`);
+          text = meaningfulLines.join(" ").trim();
+          console.log(
+            `[parsePost] Post ${postId}: FALLBACK TEXT: "${text.substring(0, 100)}..."`,
+          );
         }
       }
     }
   } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Could not extract text content`, e);
+    console.warn(
+      `[parsePost] Post ${postId}: Could not extract text content`,
+      e,
+    );
   }
 
   // Step 4: Extract media with multiple strategies
@@ -922,7 +1081,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       // Strategy 5: Direct image elements
       'img[src*="scontent"], img[src*="fbcdn"]',
       // Strategy 6: Group post specific patterns
-      'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/photo/"] img'
+      'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/photo/"] img',
     ];
 
     for (const strategy of imageStrategies) {
@@ -955,7 +1114,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
     // Videos: Multiple strategies for finding videos
     const videoStrategies = [
       // Strategy 1: Direct video elements
-      'video[src]',
+      "video[src]",
       // Strategy 2: Video containers
       'div[data-sigil="inlineVideo"]',
       // Strategy 3: Video links
@@ -963,7 +1122,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       // Strategy 4: Group post specific patterns
       'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/watch/"]',
       // Strategy 5: Embedded video patterns
-      'div[data-testid="video-post"]'
+      'div[data-testid="video-post"]',
     ];
 
     for (const strategy of videoStrategies) {
@@ -974,9 +1133,10 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
             let src = await videoLoc.getAttribute("src");
             if (!src) {
               // Try to get video URL from data-src or other attributes
-              src = await videoLoc.getAttribute("data-src") ||
-                    await videoLoc.getAttribute("data-video-src") ||
-                    await videoLoc.getAttribute("href");
+              src =
+                (await videoLoc.getAttribute("data-src")) ||
+                (await videoLoc.getAttribute("data-video-src")) ||
+                (await videoLoc.getAttribute("href"));
             }
 
             if (src && !videoUrls.includes(src)) {
@@ -993,7 +1153,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
     // If no videos found, check for video metadata
     if (videoUrls.length === 0) {
-      const videoMetadata = await contentContainer.locator('meta[property="og:video"]').all();
+      const videoMetadata = await contentContainer
+        .locator('meta[property="og:video"]')
+        .all();
       for (const meta of videoMetadata) {
         try {
           const videoUrl = await meta.getAttribute("content");
@@ -1015,7 +1177,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   let permalink: string | null = null;
 
   // NOVA IMPLEMENTAÇÃO - Extração melhorada de permalink e timestamp
-  console.log(`[parsePost] Post ${postId}: Iniciando extração melhorada de permalink`);
+  console.log(
+    `[parsePost] Post ${postId}: Iniciando extração melhorada de permalink`,
+  );
 
   // Variável para armazenar o ID real extraído
   let extractedPostId: string | null = null;
@@ -1029,7 +1193,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
       /\/permalink\/(\d+)/,
       /story_fbid=(\d+)/,
       /\/groups\/\d+\/posts\/(\d+)/,
-      /\/groups\/\d+\/permalink\/(\d+)/
+      /\/groups\/\d+\/permalink\/(\d+)/,
     ];
 
     for (const pattern of patterns) {
@@ -1047,18 +1211,23 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
   // Função aprimorada para verificar se é um link de comentário
   function isCommentLink(href: string): boolean {
-    return href.includes('comment_id=') ||
-           href.includes('reply_comment_id=') ||
-           href.includes('/comment/') ||
-           href.includes('__cft__') && href.includes('comment') ||
-           href.match(/comment.*reply/i) !== null ||
-           href.includes('comment_tracking=') ||
-           href.includes('notif_t=comment')
+    return (
+      href.includes("comment_id=") ||
+      href.includes("reply_comment_id=") ||
+      href.includes("/comment/") ||
+      (href.includes("__cft__") && href.includes("comment")) ||
+      href.match(/comment.*reply/i) !== null ||
+      href.includes("comment_tracking=") ||
+      href.includes("notif_t=comment")
+    );
   }
 
   // Função auxiliar para construir permalink baseado no aria-posinset
-  function constructPermalinkFromPosinset(posinsetValue: string, currentUrl: string): string | null {
-    if (!posinsetValue || posinsetValue === 'unknown') return null;
+  function constructPermalinkFromPosinset(
+    posinsetValue: string,
+    currentUrl: string,
+  ): string | null {
+    if (!posinsetValue || posinsetValue === "unknown") return null;
 
     const groupIdMatch = currentUrl.match(/\/groups\/(\d+)/);
     if (groupIdMatch && groupIdMatch[1]) {
@@ -1075,46 +1244,82 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
 
     // Seletores diretos para permalink - ordem de prioridade (mais específicos primeiro)
     const directLinkSelectors = [
-      // Novos seletores baseados na classe específica identificada
+      // PRIORIDADE ALTA: Links de foto que contêm o ID global via set=gm.{ID}
+      'a[href*="/photo/"][href*="set=gm."]',
+      'a[href*="/photos/"][href*="set=gm."]',
+      
+      // Seletores baseados na classe específica identificada no HTML
+      'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.xkrqix3.x1sur9pj.xi81zsa.x1s688f[href*="set=gm."]',
       'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.xkrqix3.x1sur9pj.xi81zsa.x1s688f[href*="/posts/"]',
       'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.xkrqix3.x1sur9pj.xi81zsa.x1s688f[href*="/permalink/"]',
-      // Seletores genéricos existentes (como fallback)
-      'a[href*="/posts/"][role="link"]',
-      'a[href*="/permalink/"][role="link"]',
+      
+      // Seletores específicos para posts em grupos
       'a[href*="/groups/"][href*="/posts/"]',
       'a[href*="/groups/"][href*="/permalink/"]',
+      'a[href*="/groups/"][href*="story_fbid"]',
+      
+      // Seletores genéricos (fallback)
+      'a[href*="/posts/"][role="link"]',
+      'a[href*="/permalink/"][role="link"]',
       'a[href*="story_fbid"]',
       'a[data-lynx-mode="async"][href*="/posts/"]',
-      'a[data-lynx-mode="async"][href*="/permalink/"]'
-    ]
+      'a[data-lynx-mode="async"][href*="/permalink/"]',
+    ];
 
     // Tentar cada seletor até encontrar um link válido (ordem de prioridade)
     for (const selector of directLinkSelectors) {
       try {
         const linkElements = await contentContainer.locator(selector).all();
-        console.log(`🔍 Testando seletor: ${selector} - ${linkElements.length} elementos encontrados`)
+        console.log(
+          `🔍 Testando seletor: ${selector} - ${linkElements.length} elementos encontrados`,
+        );
 
         for (const linkElement of linkElements) {
-          const href = await linkElement.getAttribute('href')
+          const href = await linkElement.getAttribute("href");
 
           if (href && !isCommentLink(href)) {
-            console.log(`✅ Permalink encontrado com seletor: ${selector}`)
-            console.log(`   URL: ${href}`)
+            console.log(`✅ Permalink candidato encontrado com seletor: ${selector}`);
+            console.log(`   URL: ${href}`);
 
-            const fullUrl = href.startsWith('http') ? href : `https://www.facebook.com${href}`
-            const extractedId = extractPostId(fullUrl)
+            const fullUrl = href.startsWith("http")
+              ? href
+              : `https://www.facebook.com${href}`;
+            const extractedId = extractPostId(fullUrl);
 
-            if (extractedId) {
-              console.log(`✅ ID extraído com sucesso: ${extractedId}`)
-              permalink = fullUrl
-              extractedPostId = extractedId // Armazenar o ID real
+            // Validação rigorosa: ID deve ser global (>=10 dígitos) e diferente do aria-posinset
+            if (
+              extractedId &&
+              extractedId.length >= 10 &&
+              extractedId !== postId &&
+              /^\d+$/.test(extractedId)
+            ) {
+              console.log(`✅ ID GLOBAL extraído com sucesso: ${extractedId}`);
+              console.log(`   Diferente do aria-posinset (${postId}) - ID válido confirmado`);
+              console.log(`   Seletor utilizado: ${selector}`);
+              console.log(`   URL completa: ${fullUrl}`);
+
+              permalink = fullUrl;
+              extractedPostId = extractedId; // Armazenar o ID real
 
               // Tentar extrair timestamp do mesmo elemento
               try {
-                const linkText = await linkElement.innerText().catch(() => '');
-                const titleAttr = await linkElement.getAttribute('title').catch(() => '');
+                const linkText = await linkElement.innerText().catch(() => "");
+                const titleAttr = await linkElement
+                  .getAttribute("title")
+                  .catch(() => "");
+                const ariaLabel = await linkElement
+                  .getAttribute("aria-label")
+                  .catch(() => "");
 
-                if (linkText && linkText.trim().length > 0 && linkText.trim().length < 50) {
+                // Priorizar aria-label para timestamps (como "1 d")
+                if (ariaLabel && ariaLabel.trim().length > 0 && ariaLabel.trim().length < 20) {
+                  timeText = ariaLabel.trim().replace(/&nbsp;/g, ' ');
+                  timeISO = parseTimestamp(timeText);
+                } else if (
+                  linkText &&
+                  linkText.trim().length > 0 &&
+                  linkText.trim().length < 50
+                ) {
                   timeText = linkText.trim();
                   timeISO = parseTimestamp(timeText);
                 } else if (titleAttr && titleAttr.trim().length > 0) {
@@ -1125,16 +1330,24 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                 // Continuar mesmo sem timestamp
               }
 
-              console.log(`[parsePost] Post ${postId}: Permalink encontrado via Estratégia 1: ${permalink} (ID real: ${extractedPostId})`);
+              console.log(
+                `[parsePost] Post ${postId}: ✅ PERMALINK GLOBAL encontrado via Estratégia 1: ${permalink} (ID real: ${extractedPostId})`,
+              );
               break;
+            } else {
+              console.log(`⚠️ ID rejeitado: ${extractedId} - não atende critérios para ID global`);
+              if (extractedId === postId) {
+                console.log(`   Motivo: É igual ao aria-posinset (ID local)`);
+              }
+              if (extractedId && extractedId.length < 10) {
+                console.log(`   Motivo: Muito curto para ser ID global (${extractedId.length} dígitos)`);
+              }
             }
-          } else if (href && isCommentLink(href)) {
-            console.log(`⚠️ Link de comentário ignorado: ${href.substring(0, 100)}...`)
           }
         }
       } catch (error) {
-        console.log(`❌ Erro ao testar seletor ${selector}:`, error)
-        continue
+        console.log(`❌ Erro ao testar seletor ${selector}:`, error);
+        continue;
       }
       if (permalink) break;
     }
@@ -1145,7 +1358,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   // ESTRATÉGIA 2: Buscar elementos de timestamp que contêm permalink (expandida)
   if (!permalink) {
     try {
-      console.log(`[parsePost] Post ${postId}: Estratégia 2 - Elementos de timestamp`);
+      console.log(
+        `[parsePost] Post ${postId}: Estratégia 2 - Elementos de timestamp`,
+      );
 
       const timestampSelectors = [
         // Priorizar seletores mais específicos para timestamps
@@ -1153,31 +1368,40 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         'div[data-ad-rendering-role="profile_name"] ~ div a',
         'div[role="heading"] ~ div a[href*="/posts/"]',
         'div[role="heading"] ~ div a[href*="/permalink/"]',
-        'time[datetime] a',
-        'abbr[title] a',
+        "time[datetime] a",
+        "abbr[title] a",
         'span[role="presentation"] a',
         // Adicionar mais seletores específicos
         'a[aria-label]:not([aria-label*="comment"]):not([aria-label*="comentário"])[href*="/posts/"]',
         'a[aria-label]:not([aria-label*="comment"]):not([aria-label*="comentário"])[href*="/permalink/"]',
         // Seletores para posts em grupos específicos
         'div[aria-labelledby] a[href*="/posts/"]',
-        'div[aria-labelledby] a[href*="/permalink/"]'
+        'div[aria-labelledby] a[href*="/permalink/"]',
       ];
 
       for (const selector of timestampSelectors) {
         try {
-          const timestampElements = await contentContainer.locator(selector).all();
+          const timestampElements = await contentContainer
+            .locator(selector)
+            .all();
 
           for (const timestampEl of timestampElements) {
-            const href = await timestampEl.getAttribute('href');
-            if (href && (href.includes('/posts/') || href.includes('/permalink/'))) {
+            const href = await timestampEl.getAttribute("href");
+            if (
+              href &&
+              (href.includes("/posts/") || href.includes("/permalink/"))
+            ) {
               // Verificar se não é comentário
               const isCommentLinkEl = await timestampEl.evaluate((el) => {
                 let parent = el.parentElement;
                 let depth = 0;
                 while (parent && parent !== document.body && depth < 8) {
-                  const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-                  if (ariaLabel.includes('comment') || ariaLabel.includes('comentário')) {
+                  const ariaLabel =
+                    parent.getAttribute("aria-label")?.toLowerCase() || "";
+                  if (
+                    ariaLabel.includes("comment") ||
+                    ariaLabel.includes("comentário")
+                  ) {
                     return true;
                   }
                   parent = parent.parentElement;
@@ -1190,18 +1414,25 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                 const extractedId = extractPostId(href);
 
                 // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
-                if (extractedId &&
-                    extractedId !== postId &&
-                    extractedId.length >= 6 &&
-                    /^\d+$/.test(extractedId)) {
-
-                  permalink = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+                if (
+                  extractedId &&
+                  extractedId !== postId &&
+                  extractedId.length >= 6 &&
+                  /^\d+$/.test(extractedId)
+                ) {
+                  permalink = href.startsWith("http")
+                    ? href
+                    : `https://www.facebook.com${href}`;
                   extractedPostId = extractedId; // Armazenar o ID real
 
                   // Extrair timestamp
                   try {
-                    const timestampText = await timestampEl.innerText().catch(() => '');
-                    const titleAttr = await timestampEl.getAttribute('title').catch(() => '');
+                    const timestampText = await timestampEl
+                      .innerText()
+                      .catch(() => "");
+                    const titleAttr = await timestampEl
+                      .getAttribute("title")
+                      .catch(() => "");
 
                     if (timestampText && timestampText.trim().length > 0) {
                       timeText = timestampText.trim();
@@ -1214,10 +1445,14 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                     // Continuar mesmo sem timestamp
                   }
 
-                  console.log(`[parsePost] Post ${postId}: Permalink encontrado via Estratégia 2: ${permalink} (ID real: ${extractedId})`);
+                  console.log(
+                    `[parsePost] Post ${postId}: Permalink encontrado via Estratégia 2: ${permalink} (ID real: ${extractedId})`,
+                  );
                   break;
                 } else {
-                  console.log(`[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`);
+                  console.log(
+                    `[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`,
+                  );
                 }
               }
             }
@@ -1233,32 +1468,93 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
     }
   }
 
+  // ESTRATÉGIA 2.5: Busca específica por links de foto com set=gm (ID global)
+  if (!permalink) {
+    try {
+      console.log(
+        `[parsePost] Post ${postId}: Estratégia 2.5 - Busca específica por links de foto`,
+      );
+
+      // Buscar especificamente links de foto que contêm set=gm.{ID}
+      const photoLinkSelectors = [
+        'a[href*="/photo/"][href*="set=gm."]',
+        'a[href*="/photos/"][href*="set=gm."]',
+        'a[href*="set=gm."]', // Qualquer link com set=gm
+      ];
+
+      for (const selector of photoLinkSelectors) {
+        const photoLinks = await contentContainer.locator(selector).all();
+        console.log(`🔍 Testando seletor de foto: ${selector} - ${photoLinks.length} elementos`);
+
+        for (const photoLink of photoLinks) {
+          const href = await photoLink.getAttribute("href");
+          if (!href) continue;
+
+          console.log(`📸 Analisando link de foto: ${href}`);
+          const extractedId = extractPostId(href);
+
+          if (
+            extractedId &&
+            extractedId.length >= 10 &&
+            extractedId !== postId &&
+            /^\d+$/.test(extractedId)
+          ) {
+            permalink = href.startsWith("http")
+              ? href
+              : `https://www.facebook.com${href}`;
+            extractedPostId = extractedId;
+
+            console.log(
+              `[parsePost] Post ${postId}: ✅ PERMALINK GLOBAL encontrado via link de foto: ${permalink} (ID real: ${extractedId})`,
+            );
+            break;
+          }
+        }
+
+        if (permalink) break;
+      }
+    } catch (e) {
+      console.warn(`[parsePost] Post ${postId}: Estratégia 2.5 falhou`, e);
+    }
+  }
+
   // ESTRATÉGIA 3: Busca mais agressiva por elementos clicáveis com timestamp
   if (!permalink) {
     try {
-      console.log(`[parsePost] Post ${postId}: Estratégia 3 - Busca agressiva por timestamps clicáveis`);
+      console.log(
+        `[parsePost] Post ${postId}: Estratégia 3 - Busca agressiva por timestamps clicáveis`,
+      );
 
       // Buscar QUALQUER link que contenha posts/ ou permalink/ no container do post
-      const allLinks = await contentContainer.locator('a[href]').all();
+      const allLinks = await contentContainer.locator("a[href]").all();
 
       for (const link of allLinks) {
         try {
-          const href = await link.getAttribute('href');
+          const href = await link.getAttribute("href");
           if (!href) continue;
 
-          // Verificar se é um link de post/permalink
-          if (href.includes('/posts/') || href.includes('/permalink/') || href.includes('story_fbid=')) {
+          // Verificar se é um link de post/permalink ou foto com set=gm
+          if (
+            href.includes("/posts/") ||
+            href.includes("/permalink/") ||
+            href.includes("story_fbid=") ||
+            href.includes("set=gm.")
+          ) {
             // Verificar se não é comentário
             const isCommentLinkEl = await link.evaluate((el) => {
               let parent = el.parentElement;
               let depth = 0;
               while (parent && parent !== document.body && depth < 10) {
-                const ariaLabel = parent.getAttribute('aria-label')?.toLowerCase() || '';
-                const dataTestId = parent.getAttribute('data-testid')?.toLowerCase() || '';
+                const ariaLabel =
+                  parent.getAttribute("aria-label")?.toLowerCase() || "";
+                const dataTestId =
+                  parent.getAttribute("data-testid")?.toLowerCase() || "";
 
-                if (ariaLabel.includes('comment') ||
-                    ariaLabel.includes('comentário') ||
-                    dataTestId.includes('comment')) {
+                if (
+                  ariaLabel.includes("comment") ||
+                  ariaLabel.includes("comentário") ||
+                  dataTestId.includes("comment")
+                ) {
                   return true;
                 }
                 parent = parent.parentElement;
@@ -1271,22 +1567,32 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
               const extractedId = extractPostId(href);
 
               // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
-              if (extractedId &&
-                  extractedId !== postId &&
-                  extractedId.length >= 6 &&
-                  /^\d+$/.test(extractedId)) {
-
-                permalink = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+              if (
+                extractedId &&
+                extractedId !== postId &&
+                extractedId.length >= 6 &&
+                /^\d+$/.test(extractedId)
+              ) {
+                permalink = href.startsWith("http")
+                  ? href
+                  : `https://www.facebook.com${href}`;
                 extractedPostId = extractedId; // Armazenar o ID real
 
                 // Tentar extrair timestamp
                 try {
-                  const linkText = await link.innerText().catch(() => '');
-                  const titleAttr = await link.getAttribute('title').catch(() => '');
+                  const linkText = await link.innerText().catch(() => "");
+                  const titleAttr = await link
+                    .getAttribute("title")
+                    .catch(() => "");
 
-                  if (linkText && linkText.trim().length > 0 && linkText.trim().length < 50) {
+                  if (
+                    linkText &&
+                    linkText.trim().length > 0 &&
+                    linkText.trim().length < 50
+                  ) {
                     // Verificar se parece com timestamp
-                    const timestampPattern = /(\d{1,2}:\d{2}|\d{1,2}h|\d{1,2}\s*min|\d{1,2}\s*dia|hoje|ontem|today|yesterday)/i;
+                    const timestampPattern =
+                      /(\d{1,2}:\d{2}|\d{1,2}h|\d{1,2}\s*min|\d{1,2}\s*dia|hoje|ontem|today|yesterday)/i;
                     if (timestampPattern.test(linkText)) {
                       timeText = linkText.trim();
                       timeISO = parseTimestamp(timeText);
@@ -1299,10 +1605,14 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
                   // Continuar mesmo sem timestamp
                 }
 
-                console.log(`[parsePost] Post ${postId}: Permalink encontrado via Estratégia 3: ${permalink} (ID real: ${extractedId})`);
+                console.log(
+                  `[parsePost] Post ${postId}: Permalink encontrado via Estratégia 3: ${permalink} (ID real: ${extractedId})`,
+                );
                 break;
               } else {
-                console.log(`[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`);
+                console.log(
+                  `[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`,
+                );
               }
             }
           }
@@ -1318,9 +1628,11 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   // ESTRATÉGIA 4: Busca por timestamp via padrões de texto se ainda não encontrado
   if (!timeText) {
     try {
-      console.log(`[parsePost] Post ${postId}: Estratégia 4 - Extração de timestamp via padrões`);
+      console.log(
+        `[parsePost] Post ${postId}: Estratégia 4 - Extração de timestamp via padrões`,
+      );
 
-      const contentText = await contentContainer.innerText().catch(() => '');
+      const contentText = await contentContainer.innerText().catch(() => "");
 
       const timestampPatterns = [
         /\b(\d{1,2}:\d{2}(?:\s*[AP]M)?)\b/i,
@@ -1330,7 +1642,7 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
         /\b(\d{1,2}\s*min)\b/i,
         /\b(\d{1,2}\s*dia)\b/i,
         /\b([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?)\b/,
-        /\b(\d{1,2} de [A-Za-z]+)\b/i
+        /\b(\d{1,2} de [A-Za-z]+)\b/i,
       ];
 
       for (const pattern of timestampPatterns) {
@@ -1342,7 +1654,9 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
           if (parsedTime) {
             timeText = candidateTimeText;
             timeISO = parsedTime;
-            console.log(`[parsePost] Post ${postId}: Timestamp encontrado via padrão: "${timeText}"`);
+            console.log(
+              `[parsePost] Post ${postId}: Timestamp encontrado via padrão: "${timeText}"`,
+            );
             break;
           }
         }
@@ -1355,18 +1669,25 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   // ESTRATÉGIA 4: Fallback - usar aria-posinset APENAS se não encontrou nada
   if (!permalink) {
     try {
-      console.log(`[parsePost] Post ${postId}: Estratégia 4 FALLBACK - Construção via aria-posinset (não recomendado)`);
+      console.log(
+        `[parsePost] Post ${postId}: Estratégia 4 FALLBACK - Construção via aria-posinset (não recomendado)`,
+      );
 
-      const posinsetValue = await postLocator.getAttribute('aria-posinset');
+      const posinsetValue = await postLocator.getAttribute("aria-posinset");
       const currentUrl = await postLocator.page().url();
 
-      if (posinsetValue && posinsetValue !== 'unknown') {
-        const constructedPermalink = constructPermalinkFromPosinset(posinsetValue, currentUrl);
+      if (posinsetValue && posinsetValue !== "unknown") {
+        const constructedPermalink = constructPermalinkFromPosinset(
+          posinsetValue,
+          currentUrl,
+        );
 
         if (constructedPermalink) {
           permalink = constructedPermalink;
           extractedPostId = posinsetValue;
-          console.warn(`[parsePost] Post ${postId}: ATENÇÃO - Usando permalink construído (pode não ser o ID real): ${permalink}`);
+          console.warn(
+            `[parsePost] Post ${postId}: ATENÇÃO - Usando permalink construído (pode não ser o ID real): ${permalink}`,
+          );
         }
       }
     } catch (e) {
@@ -1375,24 +1696,37 @@ async function parsePost(postLocator: Locator): Promise<PostData> {
   }
 
   // Log final results
-  const isRealId = extractedPostId && extractedPostId !== postId && extractedPostId.length >= 6 && /^\d+$/.test(extractedPostId);
+  const isRealId =
+    extractedPostId &&
+    extractedPostId !== postId &&
+    extractedPostId.length >= 6 &&
+    /^\d+$/.test(extractedPostId);
 
-  console.log(`[parsePost] Post ${postId}: Extração concluída - Resultados finais:`, {
-    ariaPosinset: postId,
-    extractedPostId: extractedPostId,
-    permalink: permalink ? '✅' : '❌',
-    timeText: timeText ? '✅' : '❌',
-    timeISO: timeISO ? '✅' : '❌',
-    permalinkUrl: permalink,
-    isRealId: isRealId
-  });
+  console.log(
+    `[parsePost] Post ${postId}: Extração concluída - Resultados finais:`,
+    {
+      ariaPosinset: postId,
+      extractedPostId: extractedPostId,
+      permalink: permalink ? "✅" : "❌",
+      timeText: timeText ? "✅" : "❌",
+      timeISO: timeISO ? "✅" : "❌",
+      permalinkUrl: permalink,
+      isRealId: isRealId,
+    },
+  );
 
   if (!permalink) {
-    console.error(`[parsePost] Post ${postId}: CRITICAL - Nenhum permalink encontrado com nenhuma estratégia!`);
+    console.error(
+      `[parsePost] Post ${postId}: CRITICAL - Nenhum permalink encontrado com nenhuma estratégia!`,
+    );
   } else if (!isRealId) {
-    console.warn(`[parsePost] Post ${postId}: ⚠️ Permalink não é real (usando aria-posinset): ${permalink}`);
+    console.warn(
+      `[parsePost] Post ${postId}: ⚠️ Permalink não é real (usando aria-posinset): ${permalink}`,
+    );
   } else {
-    console.log(`[parsePost] Post ${postId}: ✅ Permalink extraído com sucesso: ${permalink} (ID real: ${extractedPostId})`);
+    console.log(
+      `[parsePost] Post ${postId}: ✅ Permalink extraído com sucesso: ${permalink} (ID real: ${extractedPostId})`,
+    );
   }
 
   const result: PostData = {
@@ -1454,39 +1788,44 @@ async function runSelectorHealthCheck(page: Page): Promise<boolean> {
     },
     {
       name: "author containers",
-      selector: 'div[data-ad-rendering-role="profile_name"], h2, h3, h4, span[data-testid="story-subtitle"], div[role="heading"]',
-      required: true  // Now required as it's critical for our operation
+      selector:
+        'div[data-ad-rendering-role="profile_name"], h2, h3, h4, span[data-testid="story-subtitle"], div[role="heading"]',
+      required: true, // Now required as it's critical for our operation
     },
     {
       name: "text containers",
-      selector: 'div[data-ad-preview="message"], [data-testid="post_message"], div[data-ad-comet-preview="message"]',
-      required: true  // Now required
+      selector:
+        'div[data-ad-preview="message"], [data-testid="post_message"], div[data-ad-comet-preview="message"]',
+      required: true, // Now required
     },
     {
       name: "timestamp elements",
-      selector: 'a[href*="/posts/"], a[href*="/permalink/"], abbr[title], time[datetime], span[data-testid="story-subtitle"]',
-      required: true  // Now required
+      selector:
+        'a[href*="/posts/"], a[href*="/permalink/"], abbr[title], time[datetime], span[data-testid="story-subtitle"]',
+      required: true, // Now required
     },
     {
       name: "image containers",
-      selector: 'a[href*="/photo/"] img, img[src*="scontent"], div[role="button"][aria-label*="Image"]',
+      selector:
+        'a[href*="/photo/"] img, img[src*="scontent"], div[role="button"][aria-label*="Image"]',
       required: false,
     },
     {
       name: "video containers",
       selector: 'video[src], div[data-sigil="inlineVideo"], a[href*="/watch/"]',
-      required: false
+      required: false,
     },
     {
       name: "see more buttons",
-      selector: 'div[role="button"]:has-text("See More"), div[role="button"]:has-text("Ver mais")',
-      required: false
+      selector:
+        'div[role="button"]:has-text("See More"), div[role="button"]:has-text("Ver mais")',
+      required: false,
     },
     {
       name: "group post structure",
       selector: 'div[data-pagelet="FeedUnit"] [role="article"]',
-      required: true  // Now required for group processing
-    }
+      required: true, // Now required for group processing
+    },
   ];
 
   let healthScore = 0;
@@ -1568,7 +1907,8 @@ if (require.main === module) {
     let userId = process.argv[2];
     let accountId = process.argv[3];
     const groupUrl =
-      process.argv[4] || "https://www.facebook.com/groups/tomorandosozinhoeagoraof    ";
+      process.argv[4] ||
+      "https://www.facebook.com/groups/tomorandosozinhoeagoraof    ";
     const headless = process.argv.includes("--headless");
     const maxPosts = parseInt(
       process.argv
@@ -1576,7 +1916,9 @@ if (require.main === module) {
         ?.split("=")[1] || "25",
     );
     const saveToJson = !process.argv.includes("--no-json");
-    const jsonOutputPath = process.argv.find(arg => arg.startsWith("--json-output="))?.split("=")[1];
+    const jsonOutputPath = process.argv
+      .find((arg) => arg.startsWith("--json-output="))
+      ?.split("=")[1];
 
     // Auto discovery
     if (!userId || !accountId || userId === "auto" || accountId === "auto") {
@@ -1603,7 +1945,7 @@ if (require.main === module) {
         headless,
         maxPosts,
         saveToJson,
-        jsonOutputPath
+        jsonOutputPath,
       });
       console.log("✅ Teste standalone concluído com sucesso");
       process.exit(0);
@@ -1630,10 +1972,10 @@ export async function testSelectors(options: SelectorTestOptions) {
     webhookUrl = process.env.WEBHOOK_URL,
     headless = false,
     maxPosts = 25,
-    maxScrolls = 120,
+    maxScrolls = 240,
     pauseBetweenPostsMs = [700, 1400],
     saveToJson = true,
-    jsonOutputPath
+    jsonOutputPath,
   } = options;
 
   if (!groupUrl) throw new Error("groupUrl é obrigatória");
@@ -1697,9 +2039,15 @@ export async function testSelectors(options: SelectorTestOptions) {
       }
 
       // Verificar se um modal não está bloqueando a visualização
-      const modalExists = await page.locator('div[role="dialog"], div[aria-modal="true"]').first().isVisible().catch(() => false);
+      const modalExists = await page
+        .locator('div[role="dialog"], div[aria-modal="true"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
       if (modalExists) {
-        console.log(`[selectorTester] ⚠️ Modal detectado no início do ciclo - fechando`);
+        console.log(
+          `[selectorTester] ⚠️ Modal detectado no início do ciclo - fechando`,
+        );
         await detectAndCloseModal(page);
         await sleep(1000);
       }
@@ -1735,7 +2083,9 @@ export async function testSelectors(options: SelectorTestOptions) {
           // Check for modal before processing post
           const modalDetected = await detectAndCloseModal(page);
           if (modalDetected) {
-            console.log(`[selectorTester] ⚠️ Modal fechado antes de processar post ${posinsetValue}`);
+            console.log(
+              `[selectorTester] ⚠️ Modal fechado antes de processar post ${posinsetValue}`,
+            );
             await sleep(1000);
           }
 
@@ -1744,7 +2094,9 @@ export async function testSelectors(options: SelectorTestOptions) {
           await sleep(300);
 
           // Use new robust parsing function directly on the locator (feed-only mode)
-          console.log(`[selectorTester] MODO FEED-ONLY - extraindo dados sem abrir modais`);
+          console.log(
+            `[selectorTester] MODO FEED-ONLY - extraindo dados sem abrir modais`,
+          );
           const data = await parsePost(posinsetElement);
           const payload = { ...data, groupUrl };
 
@@ -1755,11 +2107,14 @@ export async function testSelectors(options: SelectorTestOptions) {
             id: payload.postId,
             author: payload.authorName,
             textLength: payload.text?.length || 0,
-            fullText: payload.text || 'NO TEXT',
+            fullText: payload.text || "NO TEXT",
             images: payload.imageUrls?.length || 0,
             videos: payload.videoUrls?.length || 0,
             links: payload.externalLinks?.length || 0,
-            externalLinks: payload.externalLinks?.map(link => `${link.domain}: ${link.text}`) || []
+            externalLinks:
+              payload.externalLinks?.map(
+                (link) => `${link.domain}: ${link.text}`,
+              ) || [],
           });
 
           // Send to webhook if configured
@@ -1767,7 +2122,9 @@ export async function testSelectors(options: SelectorTestOptions) {
             try {
               console.log(`[selectorTester] Enviando para webhook...`);
               const n8nResponse = await processPostWithN8n(payload, webhookUrl);
-              console.log(`[selectorTester] Webhook processado - modo feed-only ativo`);
+              console.log(
+                `[selectorTester] Webhook processado - modo feed-only ativo`,
+              );
             } catch (err) {
               console.warn(
                 `[selectorTester] Erro no processamento webhook para post ${payload.postId}:`,
@@ -1808,7 +2165,9 @@ export async function testSelectors(options: SelectorTestOptions) {
         // DETECT AND CLOSE MODALS BEFORE SCROLLING
         const modalDetected = await detectAndCloseModal(page);
         if (modalDetected) {
-          console.log(`[selectorTester] ⚠️ Modal detectado e fechado - resetando scroll`);
+          console.log(
+            `[selectorTester] ⚠️ Modal detectado e fechado - resetando scroll`,
+          );
           await sleep(2000); // Wait for modal close animation
           continue; // Try again without incrementing scroll counter
         }
@@ -1831,7 +2190,9 @@ export async function testSelectors(options: SelectorTestOptions) {
             );
 
             // Try aggressive scrolling to break the stall
-            console.log(`[selectorTester] Tentando scroll agressivo para quebrar o stall...`);
+            console.log(
+              `[selectorTester] Tentando scroll agressivo para quebrar o stall...`,
+            );
             await page.evaluate(() => {
               window.scrollBy(0, window.innerHeight * 2);
             });
@@ -1899,7 +2260,9 @@ export async function testSelectors(options: SelectorTestOptions) {
       } else {
         // If posts were processed, reset scroll count for the next logical batch
         // This is a heuristic to prevent premature stall detection if many posts appear at once
-        console.log(`[selectorTester] ${processedInThisCycle} posts processados, continuando para o próximo scroll...`);
+        console.log(
+          `[selectorTester] ${processedInThisCycle} posts processados, continuando para o próximo scroll...`,
+        );
       }
     }
 
@@ -1907,47 +2270,74 @@ export async function testSelectors(options: SelectorTestOptions) {
       `[selectorTester] ✅ Finalizado. Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`,
     );
   } catch (error) {
-    console.error(`[selectorTester] ❌ Erro geral durante o processamento:`, error);
+    console.error(
+      `[selectorTester] ❌ Erro geral durante o processamento:`,
+      error,
+    );
   } finally {
     // SALVAR RESULTADOS SEMPRE NO BLOCO FINALLY
     if (saveToJson && results.length > 0) {
       try {
-        const outputDir = jsonOutputPath || path.join(process.cwd(), 'output');
+        const outputDir = jsonOutputPath || path.join(process.cwd(), "output");
         if (!fs.existsSync(outputDir)) {
           fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const fileName = `facebook_posts_${timestamp}.json`;
         const filePath = path.join(outputDir, fileName);
 
-        fs.writeFileSync(filePath, JSON.stringify({
-          meta: {
-            groupUrl,
-            accountId,
-            userId,
-            processed,
-            uniquePosts: seen ? seen.size : results.length,
-            timestamp: new Date().toISOString(),
-            status: 'completed'
-          },
-          posts: results
-        }, null, 2));
+        fs.writeFileSync(
+          filePath,
+          JSON.stringify(
+            {
+              meta: {
+                groupUrl,
+                accountId,
+                userId,
+                processed,
+                uniquePosts: seen ? seen.size : results.length,
+                timestamp: new Date().toISOString(),
+                status: "completed",
+              },
+              posts: results,
+            },
+            null,
+            2,
+          ),
+        );
 
         console.log(`[selectorTester] 💾 Resultados salvos em: ${filePath}`);
-        console.log(`[selectorTester] 📊 Total de posts salvos: ${results.length}`);
+        console.log(
+          `[selectorTester] 📊 Total de posts salvos: ${results.length}`,
+        );
 
         // Mostrar resumo no console
-        const authors = new Set(results.filter(p => p.authorName).map(p => p.authorName));
-        console.log(`[selectorTester] 👤 Autores únicos encontrados: ${authors.size}`);
-        console.log(`[selectorTester] 📝 Posts com texto: ${results.filter(p => p.text).length}`);
-        console.log(`[selectorTester] 🖼️ Posts com imagens: ${results.filter(p => p.imageUrls.length > 0).length}`);
-        console.log(`[selectorTester] ▶️ Posts com vídeos: ${results.filter(p => p.videoUrls.length > 0).length}`);
+        const authors = new Set(
+          results.filter((p) => p.authorName).map((p) => p.authorName),
+        );
+        console.log(
+          `[selectorTester] 👤 Autores únicos encontrados: ${authors.size}`,
+        );
+        console.log(
+          `[selectorTester] 📝 Posts com texto: ${results.filter((p) => p.text).length}`,
+        );
+        console.log(
+          `[selectorTester] 🖼️ Posts com imagens: ${results.filter((p) => p.imageUrls.length > 0).length}`,
+        );
+        console.log(
+          `[selectorTester] ▶️ Posts com vídeos: ${results.filter((p) => p.videoUrls.length > 0).length}`,
+        );
       } catch (err) {
-        console.error(`[selectorTester] ❌ Erro ao salvar resultados em JSON:`, err);
+        console.error(
+          `[selectorTester] ❌ Erro ao salvar resultados em JSON:`,
+          err,
+        );
       }
     } else if (saveToJson && results.length === 0) {
-      console.warn(`[selectorTester] ⚠️ Nenhum post processado para salvar em JSON.`);
+      console.warn(
+        `[selectorTester] ⚠️ Nenhum post processado para salvar em JSON.`,
+      );
     }
 
     // Fechar o contexto mesmo em caso de erro
