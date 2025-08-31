@@ -130,7 +130,7 @@ function parseTimestamp(rawTimestamp: string): string | null {
 async function ensureLoggedIn(page: Page, groupUrl: string) {
   try {
     await page.locator('div[role="feed"]').first().waitFor({ state: "visible", timeout: 8000 });
-    console.log(">> Login já ativo e feed visível.");
+    console.log(`>> [${groupUrl}] Login já ativo e feed visível.`);
     return;
   } catch {}
 
@@ -141,10 +141,10 @@ async function ensureLoggedIn(page: Page, groupUrl: string) {
 
   const loginHints = page.locator('form[action*="login"], input[name="email"]');
   if (await loginHints.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-    console.log(">> Faça o login para continuar. O script vai esperar...");
+    console.log(`>> [${groupUrl}] Faça o login para continuar. O script vai esperar...`);
     await page.waitForURL((url) => url.href.startsWith(groupUrl), { timeout: 180000 });
     await page.locator('div[role="feed"]').first().waitFor({ state: "visible", timeout: 30000 });
-    console.log(">> Login completo e feed carregado.");
+    console.log(`>> [${groupUrl}] Login completo e feed carregado.`);
   }
 }
 
@@ -396,8 +396,7 @@ export async function testSelectors(options: SelectorTestOptions) {
     jsonOutputPath, webhookUrl
   } = options;
 
-  console.log(`🚀 Iniciando teste de seletores`);
-  console.log(`   - Grupo: ${groupUrl}`);
+  console.log(`🚀 Iniciando teste de seletores para: ${groupUrl}`);
   console.log(`   - Meta: ${maxPosts} posts`);
 
   const context = await openContextForAccount(userId, accountId, headless);
@@ -410,7 +409,10 @@ export async function testSelectors(options: SelectorTestOptions) {
     await ensureLoggedIn(page, groupUrl);
     await runSelectorHealthCheck(page);
 
-    if (options.healthCheckOnly) return;
+    if (options.healthCheckOnly) {
+        await context.close();
+        return;
+    };
 
     let scrolls = 0;
     while (results.length < maxPosts && scrolls < maxScrolls) {
@@ -448,33 +450,34 @@ export async function testSelectors(options: SelectorTestOptions) {
 
           await sleep(rand(...pauseBetweenPostsMs));
         } catch (error) {
-          console.error(`❌ Erro ao processar post ${posinsetValue}:`, (error as Error).message);
+          console.error(`❌ Erro ao processar post ${posinsetValue} no grupo ${groupUrl}:`, (error as Error).message);
         }
       }
 
       if (newPostsFound === 0) {
         scrolls++;
-        console.log(`📜 Scroll ${scrolls}/${maxScrolls} - Nenhum post novo, carregando mais...`);
+        console.log(`📜 [${groupUrl}] Scroll ${scrolls}/${maxScrolls} - Nenhum post novo, carregando mais...`);
         await page.evaluate(() => window.scrollBy(0, window.innerHeight));
         await sleep(2000);
       }
     }
   } catch (error) {
-    console.error("❌ Erro geral durante o processamento:", error);
+    console.error(`❌ Erro geral durante o processamento do grupo ${groupUrl}:`, error);
   } finally {
     if (saveToJson && results.length > 0) {
         const outputDir = jsonOutputPath || path.join(process.cwd(), "output");
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
+        const groupName = new URL(groupUrl).pathname.split('/')[2] || 'group';
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const fileName = `facebook_posts_${timestamp}.json`;
+        const fileName = `facebook_posts_${groupName}_${timestamp}.json`;
         const filePath = path.join(outputDir, fileName);
 
         fs.writeFileSync(filePath, JSON.stringify({ meta: { ...options, processed: results.length }, posts: results }, null, 2));
-        console.log(`\n💾 Resultados salvos em: ${filePath}`);
+        console.log(`\n💾 Resultados para ${groupUrl} salvos em: ${filePath}`);
     }
     await context.close();
-    console.log("✅ Teste finalizado.");
+    console.log(`✅ Teste finalizado para o grupo: ${groupUrl}`);
   }
 }
 
@@ -491,18 +494,43 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.error("❌ Não foi possível obter IDs de teste. Verifique a configuração.");
       process.exit(1);
     }
+    
+    // Lista de URLs dos grupos para processar
+    const groupUrls = [
+      "https://www.facebook.com/groups/940840924057399",
+      "https://www.facebook.com/groups/301237675753904",
+      "https://www.facebook.com/groups/1218045145877129"
+      // Adicione mais URLs de grupos aqui
+    ];
 
-    const groupUrl = process.argv[2] || "https://www.facebook.com/groups/940840924057399";
+    // Permite passar uma URL específica pela linha de comando, que terá prioridade.
+    // Se nenhuma for passada, ele usará a lista acima.
+    const urlsToProcess = process.argv[2] ? [process.argv[2]] : groupUrls;
+
     const headless = process.argv.includes("--headless");
+    const maxPosts = 50; // Defina um valor padrão ou pegue da linha de comando
 
-    // Exemplo de como definir maxPosts. Adicione outras opções conforme necessário.
-    const maxPosts = 50; 
+    console.log(`🚀 Iniciando processamento SIMULTÂNEO para ${urlsToProcess.length} grupos.`);
 
-    await testSelectors({ userId, accountId, groupUrl, headless, maxPosts });
+    const tasks = urlsToProcess.map(url => {
+        console.log(`   -> Agendando tarefa para: ${url}`);
+        return testSelectors({ 
+            userId, 
+            accountId, 
+            groupUrl: url, 
+            headless, 
+            maxPosts 
+        });
+    });
+
+    await Promise.all(tasks);
+
+    console.log(`\n\n✅ Processamento simultâneo de todos os grupos foi finalizado.`);
   }
 
   main().catch((err) => {
-    console.error("💥 Erro fatal:", err);
+    console.error("💥 Erro fatal na execução principal:", err);
     process.exit(1);
   });
 }
+
