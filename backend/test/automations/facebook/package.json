@@ -15,7 +15,8 @@
     "accounts": "tsx testRunner.ts --list-accounts",
     "docs": "tsx testRunner.ts --help",
     "web": "node server.js",
-    "web:install": "npm install express cors"
+    "web:install": "npm install express cors",
+    "realtime-test": "tsx realtime-test.ts"
   },
   "keywords": [
     "facebook",

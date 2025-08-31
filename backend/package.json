@@ -1,3 +1,4 @@
+
 {
   "name": "pipefox-backend",
   "version": "1.0.0",
@@ -14,7 +15,8 @@
     "test:api": "node test/api-test.js",
     "test:load": "node test/load-test.js",
     "test:token": "node test/getToken.js",
-    "test:create": "node test/criarWorkflow.js"
+    "test:create": "node test/criarWorkflow.js",
+    "realtime-test": "tsx test/automations/facebook/realtime-test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.53.0",

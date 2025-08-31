@@ -1,0 +1,835 @@
+{
+  "meta": {
+    "userId": "3df65892-3b1e-43aa-a80b-ee5fc2309030",
+    "accountId": "df31e3c4-5b65-42eb-9f4f-c0ea4c173aa5",
+    "workflowId": "workflow-1756606046944",
+    "nodeId": "node-1756606046944",
+    "prompt": "Prompt padrão para processamento de posts",
+    "totalPosts": 100,
+    "processedCount": 100,
+    "successCount": 81,
+    "skippedCount": 0,
+    "timestamp": "2025-08-31T02:07:26.947Z"
+  },
+  "results": [
+    {
+      "postId": "1331020158372805",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331020158372805/?__cft__[0]=AZXUmyQA0PcPNuZjDF1HlUpz1C0fv4Xu_UFyXGQ3a4a6vxTg_Jlc0NjG5yI2WbkxgJoc5H5i76VNr6jbB6aqiL9_u0ek8ylcVwD3mrE_D0sOkWbePC-lRwwwF7TRbJBPP2bam_pCOhipmCU4Aj83_0P6ozSwabYmO6Od-H5MlyPMvSxXWviShtHyP5Wm3UkLdRxk0mGus3bchbSOPxQPwgT1&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "a741ee97d7226fbdcb6b58f3239557f8"
+    },
+    {
+      "postId": "1331032115038276",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331032115038276/?__cft__[0]=AZWgUKDqKjrFxC-30HZE-XVKvKufKg55qRLN_jU2wz9qGlujEHPvuvi22l0kK7j8BViao669Jzmk9VdoCyKXV0vwRNkGV-6vFKejQr95mAajnUzZxcMeuklOKUojFuBWatDdDhqYHzMz--5TJGr2nZE15wJHKO5UyLdQtRKOrIHqL9_GlncLPm7sCIXV3Q5433MV26LnnC5JllqubWs_fu0V&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "4009cbd8fd1afdd5228637064902aef1"
+    },
+    {
+      "postId": "1331034765038011",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331034765038011/?__cft__[0]=AZVyl7WkKVyccNoVVjqlJ1uGqvaf5gSeayZdVVLFSRXVLX6v2XOjWLSyuGL497qKgfX25EKj_5LEcKXxaqIPiDnHilQFZz0YxmdakYFIDYMhkFit6U2Hy44vJbV-j1YJjqeGPJW4vqqRvpnxPXvDdffbWk56YOB_uGTGjkHEQJ-bErIRsbPySvDI-e-KZZAlAUfvq-BLTRcJc40xyGvXmhtM&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "39771d5d36d77cc67df6404785c9032f"
+    },
+    {
+      "postId": "1330611635080324",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330611635080324/?__cft__[0]=AZXQQJnh-hr7tMxMgLhKWU9A9rVj_Y3hc6kWh5j1zjw_UBFV6R3vIbAkAff1xzqP-0dZFMzLEXbK8hy6XcHJaCi6V-orIDebSM4fupsvLnZXfarLI2K3zjgN8Eszid1Ebaz9kT6eZpaIuzpqj3OAxql4MrPkIkQFOu4F56yhg0vKj83pE69mu8ZgdnsRizDRAtZBKxrjZkB2_TTDhTlmHZvC&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "f685f553bd3f07dfa4b29e7f051a3d29"
+    },
+    {
+      "postId": "1329278385213649",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1329278385213649/?__cft__[0]=AZVvDBsbwsxPj-FvIP7VaGGY1O9LrVUTIQKv05GdHheH_YDxDEsg5din5Bcfk7iaAZAGIBCnHQBQXbuSXrwlzh9fmiesddy0HtsK9XWxyNc1R5gp-UU2ywUCY5qDauGPPGl5PZqsoHA47LBScX7OpdMiweL3SjPf054BZ8attCD7BJB9QaNvSFU45x3ybOiucb2bEMWxqPD0D1eKiyPVIFGo&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "e5e39c53691df7b79dadcd6d0d212769"
+    },
+    {
+      "postId": "1331043918370429",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331043918370429/?__cft__[0]=AZW0sCVO2_D8OyLK6Kv_T4TIRDapk2YLN6KBSF0GH7WzoSQG8YGCMl0ikbmfJHtzqwOeEC-SOwCwe1cAMJPiBEUd1exqDtneBYtULpAKKcHqs7qgLGKb13cRuc_dShxZ5xLZELfh9rVup1XffY15nzQrWBw-RqdEN4cbYXnrPLD2bXgBD5D6WnrTFVtz8Mi4QiT8vM7qjqTUuWvadRINiyD5&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "ec69039a0335b425979cf086efaeceb4"
+    },
+    {
+      "postId": "1331043875037100",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331043875037100/?__cft__[0]=AZU5gQKVMPtQXzL_StY5jjoi_4SeWcv2XCpb8QtbUJ7q7mRzr8YARuQFyaY-BUifraBqPqBPU7Ex_SU7cmpOSOBDjzaqZPW_eyrX7VsHe42Ya_hfYlLQ5q2v2K_xcdzD95O5IHWnMpwoKV4rVx17MlSGMLND8-GjGCmMIs1LdS4W10rH9jLjZteFGckRG0qzhG1YSbTtkbL3hXJN2NHd-sas&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "6ac15d18b3c9642da21ae9f63b3a004e",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "1325938138881007",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1325938138881007/?__cft__[0]=AZUoGXyMyjZHRVY_Cfj9ZucNZbGdO9jKOUgJztJrgVCmyGGX17cmcaSXXyWcRpcBhKoGJovPyqboC-AjEmT9_pAvgblDu01x8yPfDfObcRs6HxIMGsG5ZPiZQcoaawlp3972cS6HLz66XYA7OPj50ylZpwa8Xi8ECka3PM2v97vBBeuk02Z4LwpaFpF9UpsfdqA8p2NukxcoYLZY4Eohc0zy&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "2d8bb78c7241c01b43d02e4147e784e0"
+    },
+    {
+      "postId": "1331043451703809",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331043451703809/?__cft__[0]=AZVTuvQIiLH4Btm6RqkvIF0yds0Y3fPGJO8z-8FH_x8-q_bxysTzjhdp7FD2qQh1qDnoYL5RE5AfGBC_WoIixnh-kPELCMlHdc9Cpvra51gKAq0AX-ItlmMdRm2VAqQggwqWYNjElcv1r3WiSYmvaLP3PeH6GRj83cMRc5dHk0cMrDSl4YmkXhqzUSOrnzgL39nteQrsM3pCfnqBjiVhHVkdz_2I4p8Sj-c_OeBJRtrVUA&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "d19913ddfef3fac639fc14d257479515"
+    },
+    {
+      "postId": "1327953285346159",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1327953285346159/?__cft__[0]=AZVEFn8esg_7RTXv8zLCT4zvNiKM4ztaGeICLwlm6GUxcV4SIzeD_EAanzifZUP9dmkg7XZlqjZSqn9YFzvJCtmpZOqLGhoDYTtm21SGEfWBDJ0rDBrePnSbH7wrq1beHg6PIqnKUpPdbzKDHt71Xb0HXsFFgCsdodHlrlqobzxbv8Kyh4PHoTEZmMUT_gqDpdR2MoeTnZfDbisrQ8l53egP&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "0fbd161cb28850170a12c5c64ff47e7a"
+    },
+    {
+      "postId": "1327133318761489",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1327133318761489/?__cft__[0]=AZXpHQRjas_aR9UE_4eUBxwDz99ufe4ie7rWUa7zA39AKCJzmsjnkN8gXahIhzU1ewrbzD_J2pE1JicxOLYJ5Pr6MrURlXZ7-WQZRzIahliuGxsOmVWmt0xBiNBwpb75OrBjsrYvjEPO2GVTaFH3zNIPRc94tlL-d7hHE8nZi5_IxA74NnOUGkcPZH5696FavtMxVf7G11r3O1kclgZJVpv9&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "b0329045976ab91731068c7294f0affb"
+    },
+    {
+      "postId": "1329999871808167",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1329999871808167/?__cft__[0]=AZWyy9vNa7bNBa2FhZ5zDoTtAbtj5xnIBo6eAMk3ENdk1WX5NjPBlFLrHKm1OitXkx0CEPMCR0B3Axp7tTVcFuHpDbVVH9lR3OGio1zWK4WzD5pj8Hc-xGuwB0Xh3N3nefjFKAYIyU35x2oZTYV4wuDWVhFVvwXAbevqUNoONbLmd5DJqmqGM9jpS1DxjbS3Kb4gKB1cez-YdnmFFVeU8MSH&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "d39d0124ae17063343b2fd304ff9963d"
+    },
+    {
+      "postId": "1326728242135330",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1326728242135330/?__cft__[0]=AZUWkTTcEM_ZNgGOSfy4YY50EyTBrz0bKOdMYkmMZYvX91Yol-TktZHL1dDjEignrAiChcLWXZ2NabFain8T-IEdcFuJip_GWf5_NB02Ok24ruQ-1302k4SHR_8DDVM1IAEjBT4vk2sqGvGK1mB8Iqub-TsBni2ox5gYNh-r_WYStYWBKIUCmvMejDhDuN_-WwjReqDSsqSmNVvqxgqov7iI&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "a95234ac119c7503a1bcb849b6a863b5",
+      "error": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first().locator('div[role=\"textbox\"][contenteditable=\"true\"]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "1331039581704196",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331039581704196/?__cft__[0]=AZWWlrp5q3nszZ88H-es1kRAmBi1yMCvsMH_39OU2ShaRKvGPP08-dZtEhJOt6zKzZuQSVEQkV6frec1jmmOvrUFGNXOgu7t5fOC2gCwat7YAhob-Y2bWF4Y-IZ--IiniFXMZNvj5m-oC_kgO0OPSqGIg23yVUcx-y1lzKosKZ-K4qjaDJBCCYosLGNfDzN7LTLhKQbbHXD3J5P3FXJ3KQlI&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "626c5b90470e4eda3fae362adc69f09c"
+    },
+    {
+      "postId": "1330930095048478",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330930095048478/?__cft__[0]=AZUxBGeUStrud33O0x8PkdVfR3tmKubGdwWs2hL3BVQF52qATE2zI3h0rOdA15j5ZaINJgjv0SjB5WTm5IYXXu4Brti6vIT8yAHQj85tuz3NiGQRO4wN3Vf2QLcLdooPWuRpdewu7chfB3W-R8SBHo6RPVwmh30sO8JAvBiQPxUjjF0Ba39jSy10-8-0YnYo9cbBZP7s0RI86HYF3_j4XCEW&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "af0a70fb85cdc779b292c01944bd506e"
+    },
+    {
+      "postId": "1330997661708388",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330997661708388/?__cft__[0]=AZUJAX0dQdJXfD5k-aD4SGd6ZcnzZog8ILSOEzcYZbCgUsxDBC_P2t3D32H-JGRHIp8K7l6ZhDtUWWasey-cA6ouKcrJDeZHRGgJlC-tahhsJN59QrrpubfbPKFmRTC3z9JajKssl1IUYJL2ZdYeO4WB0kAg1RssCvicPTMdGErYEK4gTEMz_WwuEtSD3erYWKAbjbhUT3TD1RxZwjhNgUpx&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "a0bb4dadaf1fbd2830dfc4e823eaedfd"
+    },
+    {
+      "postId": "1331043325037155",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331043325037155/?__cft__[0]=AZVn_vsaYTBYyXzYBw9OOL_LfLnYV1O9-JBtXTpQ0217o41KUeC8bvGYb8PxYTJOeXdYOqlNj4da_P6ZA5r2F272uhlOeNrnz9dNPRHmmt55Fviimyi7OhKjODIIrfC5hvevU3d-OvL_UW6OrP8rzi1m41LqgCg_TdxqJl_V9JPuIJpog7tNl1HeD6Ff6gubntY20t7nnQVLAYlllk9rrH5D_vUm2kB9ZjvXN6IRYe5aGw&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "e5207538b3a506556484ca0cacc48a89"
+    },
+    {
+      "postId": "1329170221891132",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1329170221891132/?__cft__[0]=AZXITbSIq_pc4OzfaUc8Ut2y51LmMUHmx_YafPnDma_nqAT_hnveGCc_6iGrGQXSz5rD9OMiAW-qPvOT-F1FIYT2gpiaV_hc6lwOAissSH-o6McneNKNSBWN4quW6U7p-3cYHeDl2kFhpWLpEoRfM-GuzehpZMWFbzy9f5QWh669RCJWw4LlNVl2gzrPGfHDum73MjGJF8hqefviDWCzYafI&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "ddcfa02399be1e0b53410393d48ab0ea"
+    },
+    {
+      "postId": "1330611105080377",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330611105080377/?__cft__[0]=AZWIkoFW8MO9LYBRFe6sRGHpatbhSOeaGEkKveTLcCZ-j2PqRE5HdE18QYaggi2qjHeYeF_zSj5f6yLZnnsyUCkznEgPrrGSyHPzSk9BjHDckIoBV4hCNbl8ngTxTT2C7ozXfTx4iNZVICbYBrlOCOgwE_Cm7mhjLtGbpfXI36ovlVEfgxZZOvZ2kn2IVx07FjoGnnPhdFWdquTneV1EpvVR&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "2d584b03edf2df2f0d324939474b57b2"
+    },
+    {
+      "postId": "1330917331716421",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330917331716421/?__cft__[0]=AZU_jbeODx6SmVnZNvYe3mr1NIV3ixv3LIpDqxRVDxDuGJAyQEuD7FlQ0yy0AOWzruH-_PotXPmHpp-qrOo9KHD71N5rZrz4kfisn7sD3kkkM4KCXFO1DSH6vgbZMorO-K2vLHA2NbHbp_fvZKMcLKZ-qnAgLkqGalm2HHHVEWhibiSOGxBSjK9opHl3aFWCaW-DjO148_QtTQUnk-JxEuRh&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "32fa76d249190172aa2cf4224914687b"
+    },
+    {
+      "postId": "1331005861707568",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331005861707568/?__cft__[0]=AZUh7TqL9RPfdcPYzwaHX-ZP-8locsaXhGdubxlRhnj_HNSfxsxqEtmd6MjMmvCtADvYwY-SNBgV8M0WYU0l4Zi7zqAaf5mew3bG8J2mb5tRPMKNG2Hw9gf3qhVIqsaPnvJoPsbIGBCNIDqpd_hDVtq3SpvuedUF8sds-w7gCtbpulm9SACTNFU7g1CWio-zA7yaHKa9El7EPZH9V416d2_J&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "2f2275e1f02e08db9b238fd39e82f8ac"
+    },
+    {
+      "postId": "1330977941710360",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330977941710360/?__cft__[0]=AZXlfxYV4bMw0jAuG8TmsJ0fNEW0ATwB_ntoG7gn-Rkj3iioVOGuuizayBsJmiMP9_mCk8bpHk0YbwRfLT4ES8u_WgEqVnFRM3F061Xv8BTbmmk4GyrS_STYm9_rzSCYGpfRSfYT7uqpQitgNhS3gArp5tEA2SogmonetUYcctHiYG_xUHmDj1mMBjQ3U0yJNlBfJgfEn26s9xqUBg2l8ZNU&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "d9166a1ce41d09b94ea7e1a4bd4cc753"
+    },
+    {
+      "postId": "1330593375082150",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330593375082150/?__cft__[0]=AZWKWYxygjPtkbU-kL3wRU5pg3Zz0dp6Hls3robBPtdARZ8fDf2VzTCIrw5AZaSVXsa8GAEO0tJuMerAaNlFRdHnOoHv5-CwW3hgjIgVxijw9IWttBh8f5hVNcmEkb0_QvJTeO2gcjB5RvxYvCRJbm1SjZtc49XZTog3uCbdAEG52l-CrhmwYlyEQXq6mksBwso88h7jKpiU6nTHG5uZKLy5&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "270dbb0df971e7719c5e3500015e5e90"
+    },
+    {
+      "postId": "1324269425714545",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1324269425714545/?__cft__[0]=AZUn-kWoIrsm64eDvxvOdyVkkwgk8zsi8Msyvoozcq6F_llHSLijF9p_ps9AvE0rnSnppwodBzgDVxL9F-rGqg01UiWfq5Fveblcp1RNl-m_k7fQtojeSNSleoaiEb6zHo0H-Za0UaTwKsRheplMM3TPxHVV9mml1SQ5WbLWPSbYGMV4Jv6MzWf71n3gxeWlteHWrRhBcVeAOu4oy8cDq-Jx&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "7dafa4dbeb1f9eb4a46dc800f6d26ca3"
+    },
+    {
+      "postId": "1330798065061681",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330798065061681/?__cft__[0]=AZXoluad33O3fTQTf_1RRhYwYtsoyiqlS4v8yV4ZKG4RHkYytm-0_djzFPTzcEAnzvHcRELV5xGiasTUmrzH0nZNiNG_Edi2YFnidEz_qIkM1MJU_5f1iwt4aVDUefeGPkkReCyQz1z-snvwT31hsK6UWAH1AveVmRlNLnW6gyFeuMEoiKpv3M1e23ohc9TsmyT5sTSZZKQPvt14pA5lEqN4&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "f02c28963fcca4120ac18f78376ea3e4"
+    },
+    {
+      "postId": "1331014631706691",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331014631706691/?__cft__[0]=AZXPGp6G9-9IsyZqmvYq733dFrTqBz6pyidrFWFuJYSKx6BAdi54JF1tmR8yfUuXLGdAkZCEixaCBgHAqxBSTwiTQlE-OE42EKItI1b7dqS3InB2wMOYLx5Ii0yP1rAIdA9hAnY7YX7X3bM5ATiV38eU7wvqxTNxCdzJmJGWqzYP9fpJ6udJ7rO6XeOV7Rd3yLc0EnmUkc5P2jyFCkYXcQS5&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "26fcc495aa22ee7fb2c93c829e646cd1"
+    },
+    {
+      "postId": "1331013678373453",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331013678373453/?__cft__[0]=AZXo1C2H-6Am-Qm1TBJ9b_qpd0dNpPTCb4Eus_oZpZZDkhENRLzHeYC6-MWaFSI2Ic57h4z6N3R28ma_nGu_je6u0u2tQVyzyA2JjKpnzRCGTYjMh9xo0xT_5uaYfUZrwKuMdWNp6zHP7k0BV10gvGYh2D4DJC2guaU7DQfRhJyhtxKNcdsxLptPMsCP2BQ55Gl4uprmk6RTv-rFE6ZE5f5g&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "1995e4eb39219f136d5c6bb4345ea994"
+    },
+    {
+      "postId": "1330993021708852",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330993021708852/?__cft__[0]=AZVF2n8lmOoaCPrgHOOUqEFD9C1DtYpR9U1r0CI_ELHMma_AdpLybIYFwEmAzoOpnxZBQAGP8SxIib_48r8wLy8a3vCpHRdfKEZ3fL6P14HBtJ0C6yyU6bceFmyPCWtrG760hDTYMICb7qGpdcYzSdeGYKBKdbUPRrX-S53LY0smd0YekcVkF1wetvzPgeGiNO208QCWGSyQJLP3BxYTYVJR&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "ed5501d42e0c9f8b92fc459bb31f91d2"
+    },
+    {
+      "postId": "1330999695041518",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330999695041518/?__cft__[0]=AZWvdkceDXB00VIJxwX2eUhXM4s4lyswlTcxMiiUvWn5y3r4ozQmAbCH5C-kY_0PMF16yavUoytfdpWejKsRJf8NBtpScU3C7-PonWYUuF2M9YWoZY2P07ijMGWu4ZAjqKAbli1CwbEuackvafiQGAoKjWyBQnU51yPItO_dc7Vcm-50r9dkt-SwOwkXLxZ1po_Gqa1ke4155177dnS83-Gc&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "40542e08e212d902384a08765ad6bdee"
+    },
+    {
+      "postId": "1331036558371165",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331036558371165/?__cft__[0]=AZUeKfGqhhYHDoeDke0B4q4oqo6pVUglUBEZfpqJv1-hXhVbNJ9Z1QawJVF_ADkWeAA74VHVFr_5LVouI6SsirCxSNA4Mz_GufiQSpzvHafTJutgomlp1gUTctecP6lGOS4Be02sHxiVHL_VC6WtUZuQlow4o9Fmakc3yoMxURaknVuqSso8I--_N48hxOtBjSaL1gze3lE6UDFKQjgeanoz&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "427df1dbd4505cb53e5f1514cda6e29f"
+    },
+    {
+      "postId": "1331039615037526",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331039615037526/?__cft__[0]=AZUssNE3ZLtCA4ZrpKZntuxibxPcjYdFsVyNeAme44liBSE1R2pV7mH9xyebriagZ42ev_Q-7xDCqD_V4ygFfu_vqCuz4a0npUDZ6N0OWTnvZxHOv8u2-Nlg2hMMlDA-OtMh1PuPYVjkFAdHilkTqYjDAl6bfUJ306aoB67xnFZ8QVXd5KAX7R0RUrs3TuXkFnAB2Iw8ekqfI6VdzrE_x5Pl&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "e1aaad4db5269ca4a371452b80844aec"
+    },
+    {
+      "postId": "1330953815046106",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330953815046106/?__cft__[0]=AZUHPV6BiHOfbtyc2TEFw6Pvqci3pBwpOxm4wV1_pd13trMI7L1AhBD1WsFidMogtY3h3f5klyAGs83SJJHMYGQxSucO-FO-aFYGRoYLorSvv8OpdFEiEpPyZsfBaljegWCU5vYzl0nLMqGn97Gb6-xSbOh-gspPYlriswJik2OmB0vOs6qJz2zVerV6zTJHxHg&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "c638a0ea2beee6b13e40ff45835b795d",
+      "error": "page.goto: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://www.facebook.com/groups/940840924057399/posts/1330953815046106/?__cft__[0]=AZUHPV6BiHOfbtyc2TEFw6Pvqci3pBwpOxm4wV1_pd13trMI7L1AhBD1WsFidMogtY3h3f5klyAGs83SJJHMYGQxSucO-FO-aFYGRoYLorSvv8OpdFEiEpPyZsfBaljegWCU5vYzl0nLMqGn97Gb6-xSbOh-gspPYlriswJik2OmB0vOs6qJz2zVerV6zTJHxHg&__tn__=%2CO%2CP-R\", waiting until \"domcontentloaded\"\u001b[22m\n"
+    },
+    {
+      "postId": "1331033735038114",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331033735038114/?__cft__[0]=AZUxZlBeK3A5_zUkH48I0u2ssVhp89O_iM9WAKFjYCRgR6kThfTzNP2gpDXdyyroQME-Py4_aGdeyz80l-cHh5Zfy7L2riu-9Hqrcwy9INAWF5U6iiGybpenE_oiLqzmHGWnao4Eb-P7MgC6xsOBXLG7kPxDWzUvAJ2SiMUPWbzetCpX-7NfD2S_5UArpDStOielpn8JuTyBVXw6-s-3hfVI&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "3ed3f8ce3b0ff4e382fe439749314c50"
+    },
+    {
+      "postId": "1331039585037529",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331039585037529/?__cft__[0]=AZUATMSBeYOQCVxVSrLUdwGnKvMxLcxFwaams8XTRxwiM_bJPhBUUXTFe3js8Uj3N_xahMroZpMpysmQMFF4HpC2ExCAdofrrvm7zHlyeUh64sc12bsX4-Z13n_agFaA7lecAyyY030swg3HvV7jmzY6XLDERB5rVebMUlLQeljhV1zhqrW6jUF1bJ6TcQQmXtMGHZ-cGXSYxuB8wI06wJ8M&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "04f6314e760a1c1106e42a1b84f76100"
+    },
+    {
+      "postId": "1330987868376034",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330987868376034/?__cft__[0]=AZVhdHexwhcD6K0Y5YVSIhCY0UdaUs-99IXRBNiGXTDnBQ2FLSOV9Me-osvK7HZbsP0rhlNB93oezse9M6LHQqiOBe6V6zgYkFZ194ByaLT-XADOmVWNGQtF-R9tyOJwZRqELl-JSS32rKtF4MGCSoKB&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "a6035f226b11a8c10a912055f8d9a3ae"
+    },
+    {
+      "postId": "1331021285039359",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331021285039359/?__cft__[0]=AZXbQA4-lyvh9kaCICKjSQP_p2P_WW-liHrN2WG1qGPTjCow1nPsUHt0KV092AXsVzlAd_GZ_bom-8ZrB-g5JSbHuc7VVlAYrYn0w8uRTBR1Ct4FECDZvHn4K2VBntcvFtYaMMv6fr27LVibN42qs7tr&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "28a46a3b5c9ef736537538da2a479dd8"
+    },
+    {
+      "postId": "1330799705061517",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330799705061517/?__cft__[0]=AZWAaDCQf-fL4DqlKcWnabcoYUc_KG1fdA2ORZADGp_DVDEfNXEPWZ_s9SwjW2Rov0BEqE8d7A9jj0b4Z6thCEOLpTutSU7LCYisMsqB-7iyqP0e8UNaSOMw4d-jRdXHn-OkYMXmTBzZ7BGsZckB3uJR&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "da13a7e1f0c49f5ef7c6333749095669"
+    },
+    {
+      "postId": "1331004528374368",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331004528374368/?__cft__[0]=AZWnFfY_mNI65t8IJMNRC9xxQVlldY9oUayhu3iqzswHrRFzCTYpvx9WDIWq8P0YPG9F1RD1XgqXmHuBEEO1RW59zSaLn1KM2MgfDrafkWpxGN8SQlTzvI8zq0zjKchlov4pZGU-st0v-nRxtScpb_Uhw3Qf7wbwq_9QHEx5b5vPWm6kSebrITQAY6fT0CsYK7DC7TkLQiwaJ7BlYEYfq18c&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "1fda760959da3103358c9164624421d5"
+    },
+    {
+      "postId": "1331009521707202",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331009521707202/?__cft__[0]=AZWcMIg5w2JDZkLM0OPJeJPnbNBcBZ5rCAVFUhq0IHed9c9Lv6HHl-eV4u9RsFhaMQ1k07fPMtWCj0sLfnOBZ4n_GMR2bCDijrIOa_zZe2-BhgZ_XB4EqH0yuLBmyzE6c8-0gHKe1xXwmrtgjAuShiNLZdeAo985rr9LKu9Z8Oqz55ITdSsHoZOo-ZWigcVdWgD2uQSonRdjy8OyaBaKQbWx0MYL49X_WcQ1kjvZ3mwpTYLuKEt787fq3UDarlyVpnQ55oAAt-swudeZh36YCFhN&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "a5dfe469c7abb8c8293ad55d9e33d5dd"
+    },
+    {
+      "postId": "1331004908374330",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331004908374330/?__cft__[0]=AZWQiChMv8rfG41q74yNzhTpLKdbmX7thfN8_2BrMtDYXucPvmjC35kIwftvnXmR3Zg6k0YJS7wpd6omxxFoEwerjT8S-h1IlB1o-YAWGesQifd1evhSF6ysf-XR8eNGHDzx7jfHZnnaCoQSrx-LV47jPj_8GGWvCMdGkq3xsWDupOIBrkLzBDyfcD6vBhzQO64xZSmoRybXSgDlUwLcHa9S&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "80ecb9f2738b027442805546093ebf9a"
+    },
+    {
+      "postId": "1331039008370920",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331039008370920/?__cft__[0]=AZUXGvWyWuxIzpJ452Mo-dqwHu7Qdh4FNiSP57JJMPyHoqeorF2Dluph02FGp2_dTMuEcQRsK8u5TV6doO408usAruZuX0u1k4e5qHZkFb7d8bo2HPPtWpcCvYWpTWEP1PCg6WapoNO1G-e_S7uFdh40GOBIUFrAHaockC98NXxTQvouGeLxVqp0ULNGSCtM20NAcCwcDeU44GAAWPdTxeaPqsB4IXcHhc312RzAhLrOfdVIu0WuqD25z-daa4_liT9NtY0XnEAGCivbdxMSdhVd&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "97a4338a101b8886b8638f6b9bd4f354"
+    },
+    {
+      "postId": "1331038955037592",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331038955037592/?__cft__[0]=AZWY2ph83xySflqdxWKh9jHO_DSjFS0OeOe1RxdJJqlsfpkwPTXpId6-8zDixX1aQkgP6QjGVo6Qx2Zcn7f0JnHlWWIaB0JPs1w3A0-_yHKEB78cNiP4VcA7inacXXUS070nIPzih2zaXk7C9Zkjy1B_nsnYte-UOXOgo8eov43UL3FcKkh7sOGItNYyDgndpfRBwXTmFJi0CAamfTJMutZFYFKrIdcHOugam-3GnLFGRR_napfvw3ss7U2U4Mv_5vpXH1l6whQLiu4WAzM1kEML&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "d38e3143497132cc49fc71afd642e8c8"
+    },
+    {
+      "postId": "1331033565038131",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331033565038131/?__cft__[0]=AZXr1DlpMEjTPtQhiGU41XDLdr6rpw3fqvS9_41P-g1TSDvlOGkMJ1FDc4Q-e5fgeMHX_oRMEZIofof2GwqHdvKQZKqtj7A02jCiFnBo0dkBkS_ZWjSyNafMfoCjVdzVvimu0wgloU2CVW2yOH-UcusfSfuqFZmSsZcvDO5BAfqDhZc0Y0dxHzzh65j1998kz4FNQmmmOV1ug_aQYSxTgBllH2O9z3UL_FHGTJP1ZmWNHw&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "cb30bf3f3131cf40681f3b0cf92599e5"
+    },
+    {
+      "postId": "1331038225037665",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331038225037665/?__cft__[0]=AZUTzztOrjzh10JNs6UcuZEH_tO5g6mvULsUaEZ-cTDDvRK7y8deIMyNn6r8tPFSqPjDS8db6yC2Lngm8ss8O94VwDwn8kfVTZK2JzmUXjuWl9nQI7cqLMpMVoMI7KcGoo3ueE1nNgcsin1mD6bmTBMue-fHQOl9Y8g1HGhNbUiakxWO0rFEfaEJLndc8BOvHf3P7CMu6AXauT3UGNslfdfZ&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "bbea93e1816fbd4ca3fd36eecea3904a"
+    },
+    {
+      "postId": "1330899475051540",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330899475051540/?__cft__[0]=AZXeHBoVhZGsLmKPdW9tmGeoxpQIAJ0HykIAJIEBgehcLrEoUgPcpq7apzxISmhFFTmM7kT0YbUW8Jb56NSZEclVaqV5XzaTbYuIwdEFf0LjdGQeMgaEPzURZEvWXmPVlJVvm4-pgcFkm_ii_pXLBdB-OBhiRUJ7PXd5Rt1Crh1UQ2MNWTH0idJABkXcPLN4QNBq5hQ_o9jDmXqmHRI18u79&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "1a2f84f236a5ba1d4bf8f01e05b6e8d5"
+    },
+    {
+      "postId": "1330929128381908",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330929128381908/?__cft__[0]=AZULTNSWq54vaGPiJW7K_IvxZY2LHHSDu4XIcxcv7Q257U09gZDMli-0Jvpn7i2_K-fDx4DErp9-S7kXNsKikgue4-QpaDjiX9uQ6SB5GkEgTo_jko1AoJ0qt1p1qtymOUmmfVnv-jKkI33IucD55XJSwk8aDL67LmSSjCZyxvrl0I3YzYVZCbx6r217EP6ddrbp0xRLP8mj2qML2NCVNhAk&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "92b8335ab4502aef73968c5db601d8cf"
+    },
+    {
+      "postId": "1330970491711105",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330970491711105/?__cft__[0]=AZXvX7QlcNfLK1itEmGy2wAtSaUpY90TbmB5h-5vnfLFjSSVzjlfrjOeCQwWqveHxyA9XV25Qk48naJJFnWesc5NwsrLhbbOuKwgxSYp8jGbhRZYP_9eVVjxAIldn7Slq5FXii8A6UzmnNMS1q1gGTEPe4u3q5O54QepDAMnG0-esMlCsUXtJdy0LUzLXMTk09aZ1r6t94a0bnb27zVhOD0k&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "3d66b2f21128f150d2b85c98b945821a"
+    },
+    {
+      "postId": "1331009508373870",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331009508373870/?__cft__[0]=AZWp8mWsP5RPmpbCELZ8cE4E41xYDYNSbE0Z3NnA5ATBFD__93T5j8XPodfsgEi6fRkF3MtoZFEQ2dX6ZeOMkTALFaTaZU5FdVAvwIC2yyFCCMTK29Vy8GdPkcZqYgsBUj3_2kJsIpWWD_GTWQVRsXzfxE8WpwTeW7thxvViwm19hLe2slixTTKVJEJyxAs80zmvRdWXs-MABl1chMKVh9sd&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "9f05397815ac1fc218a60bad9ef0c904"
+    },
+    {
+      "postId": "1331037468371074",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331037468371074/?__cft__[0]=AZU_ADAE5QmCjA8CI0cNzUNaHuphoDIWBZH4BVU98EnIbmWevODLUD2e7CMjwAF_e5Tv8vUGui5boXbgphb1pmU4kG__S-cTi_MQ63BFWc6n4gefZOqaCntJn96QexG_wMtI7XYY7kEDop6u91-1SyzJE6u-j5Jf_kS-91NBfnRusQ-819RkfHwA9uGOL-j9jmk&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "417b71c505b1375fdc2ac13d67124030"
+    },
+    {
+      "postId": "1321035136037974",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1321035136037974/?__cft__[0]=AZVfHEJe4hGrNwuXCe4aXcGYfngkKQb1fw1tdNrTLirEvuXXmnK8JSGM6p-KUfVrFupfoVXaM0o6hgT7TVpHFKcDhB8RGcrs1QdlD2gF61OaDQSInrp32O8es98sieo0l_UQJyzx8ri50ULIeJLDkLX9ohqfRXXaYa9n_pGDT3HT2swMyx12CVbsWASxKloyDutzspxFbnZjBwl2vY4567oh&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "2a6476fcb27b77ca0e61bd9bab3e4ed3"
+    },
+    {
+      "postId": "1331037235037764",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331037235037764/?__cft__[0]=AZV6eaPbSZ-yvCrn7aYmYGe4H4ewqdoA-ZA9jJ0YCoYHCr2e1T4Ufi1wJ8m5J9TLVVVfGH6IpGN9KplTumkeRAX5Czsy0aet-m1Cz7CYq70_Mf_wsMWv2m-A3UkL7K6iDNFj16zg1LPnLPtzDOonXaoRr-u_4Oubv1_pvxh_qGoMBJVz9d3AH9pv4G77HGDOHKVwyAV95gvtJPFhyq3FmTifCoCjG7WMQ5WhHCrvOEPRTQ&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "8348e2cc3f02edef88b794c2c02c18d6"
+    },
+    {
+      "postId": "1329295425211945",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1329295425211945/?__cft__[0]=AZVYEQumuLh_F0Bb4AuxMgd7Gk7UXQg4KALIFUYzv-YhHrY7JuhpttZJ9Lju6NkdGoZZgbQ5m-OBjuOwA8cxUorIi3t7ZzIFFbmZIXrUBssANGo7TAvtP3zsqgpdzGBtx-VIrUDQ-jYHmAYt-cUZPf7ZXIsdXFnC0V6lgeJfzAW4zveDRtaZ3JGJHENsXl2yhD4rWJq-32GujoOWZAfYvo13&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "b44688f3e8a441ceef06bc3abf19b191"
+    },
+    {
+      "postId": "1331036385037849",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331036385037849/?__cft__[0]=AZVHKajep5bUJsF38czAyIAfPkkOU_9b2HMRMoHGKMHIHfq8BwwymO7XRLFpb8Wsoax6qmOSQao759_2blzfNwOMEZrX0nUhIv339hYovFYWkguCS6tllovAixAVu1IvbaRsPvS9Ew2OJlwmF2noKvVJnpkeU2GuG9o512ygFQNbXl22sFuj_EcVu_4Kbp3CBKcYHZTcFk8vyGt7qa0lHHo5&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "80b9f17a163ff5f4fd9d64b6a274e513"
+    },
+    {
+      "postId": "1330975738377247",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330975738377247/?__cft__[0]=AZVq5fNaaKbeqxiNSKbkIdDKN5ETJYVifcsbJZnL82KpUonGDUMYUcQ7hP3ELDp27_yzEFVbtl8Plxj7cgbGZ5dDwFa6K1i4k7wKK7AkqbnFnu3tVEaVm7DI8YCQTCSzxDuVn_C5_cO-MXrFoDTOUgAvnj2hEaVYazrRg6X7ZP4UpOy0vGMa_XamnIC4xCheNRtNrsv1FYmq_MooRFlgyLYc&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "6ae23032108743ab5a79e96e16cb1aec"
+    },
+    {
+      "postId": "1331016495039838",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331016495039838/?__cft__[0]=AZVh-YBFmbzWyKvpJyWeXO558wPd_iav5sTSuUlvXodmTqxJ--nCSuWUroQJCSflG7rjTzmtSeahD2pBBV5S7eqBsP2rNOdIP2QsStkQHfWcYdMuKnSu8UR1MI4P_wnT86TgNhLmtERJRYDodYHC-3XgbEcb8wuxNL_3BZTrVW01aXzsi5X7qxCAh_AVOkQZWP8&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "0be9b60157f51d954362a2ab4778fdb5"
+    },
+    {
+      "postId": "1330042558470565",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330042558470565/?__cft__[0]=AZV-X-GUMealQ3_0e7gS50u4Zr9xx3KKnahqGCXndAW-EkTvN0Gio5ZK9giXDDa5BbJPEZRLIjIhQhtitytJH56bPZl-itYY6WMpPxPjk_Y_uTxueYxpbZ6woUZiUu3YnT0GVVOi7J-Tc2ywkDZZFRtnOZ0lOitGhnB-C7f-6JQdGMKzRcqu4HcAriCCI1rjvZNmwkyDo_peJviPgDvimngm&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "d4114d0f5c7cac91c6ed3103dd7cdb0b"
+    },
+    {
+      "postId": "1330266751781479",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330266751781479/?__cft__[0]=AZU9dVSGClZsNKMjCpE7ISChIlmj1JVt-s2y6O-GOvrSZ69MYUl4aF3_LTCFk8lBESDRcCsxoT1Y75EjQWMei_UqM4aIkqU2mIgGQFyWWiI43SIh1LP2zsDIfbYDuPfZVp8ibU9c645V5i37ZPJKNCFnmBs21vTWZse-a1IfP5WjKG1rTVwDevPptJBd9B4aNMrqZVs0kR56LQE7uu0hjkwm&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "0938ebf91a074a2390df9df7af0c6715"
+    },
+    {
+      "postId": "1330990265042461",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330990265042461/?__cft__[0]=AZWuKBFCTvx39V7462Vuj5NbTOuFKRqTfKvOj9UIBUt-Z9zrrvyKp81iNrY-j3Zidy3JGS7C_UjQtjAalmjx5M7ce380lDy6Awa3CEwQchVA6iy8l8xn9T-YZo3AF4EgQ7PB2deh73KC-B3CBbqTvrn4BX3vABLTMR1CWPvaCtqKKsGoPC-Q_586M_1goSGKp_-KsD4p-ie7Qbb_HqOiV7Gz&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "6058a81f78dab25f76dda5387513cebe"
+    },
+    {
+      "postId": "1329855258489295",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1329855258489295/?__cft__[0]=AZVSuY47tD8csqoTn5dEISUoIkc7R_QIcbxeHhLURuXLp531bIQkY1YDHPaNVaqef6G4wTHhxFTPg-1tfiXgNAauN6MnPpR8x8Ct94ntp3GOh99iDU-pjeKvZX8n-jHvYZMQLIsZLUOHVHItn7JrlVdc_s-eF5y3LShCe4xmW4Y-qlTqiZAOLRVWirK4N76ZeYjvqLuO12MWsPGUZUesEhPO&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "581c573eb075ec38473d2d96c1ee7279"
+    },
+    {
+      "postId": "1330986071709547",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330986071709547/?__cft__[0]=AZWTxZRxgGqzhDcjsvSgbJmO3BAvfoMMwIFROWtDCNAxqjAypquC74xaXdKkvtWvOvhBWIvWm_V9AvWlWY20LXzGdQwXOl91JKuQhGqra4ptDZ65wZLdU9L3BgZtN-NoTOFPuGiHtqhmFVM7zp0_JdKudGdXII03Z3zWXW05ukBTWNYcY9SmaZPD4BVpHjUYfFCW_B5pbo7G8DtQFE8nJ6OT&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "69eb4f69a8d7e139eaa0016249f8af46"
+    },
+    {
+      "postId": "1330782441729910",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330782441729910/?__cft__[0]=AZXHuhvo4uFk4zTuotqdnyZZiWuAYrsWLS_vgIGAByzRdzPrlSnkAQgJQFqskjUbY2Rf7KxELhchNXTyAbEsh77aO4cj_lBC-1Al8PWnoaYcFxLODxosdanNHcOpsepfzUHNioHG4G5Zh58Sinmco-P_J_Qrlgy9SAkKEWwJY-fB4gDBiUohyzx0COYWtF_LKZ6dB31BYerzuCOF2M60aukB&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "5ab948db0a55ec85e82555b0ce6fe3ca"
+    },
+    {
+      "postId": "1331002401707914",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331002401707914/?__cft__[0]=AZUyNgIk3obbUETuIMJCWxHU5Z3TM3AcXRZbM7yyEpovYQtXYWAHSNAIllCa7CYMLzbiSkAPYtD47gv_ns7ksENaSQxKsE-OHggmbez0iTkXedmdtB25uzfr4ctDsg2vBffbZ1PAHzLcLKJ4rCTVEBnz91AG-Pv0P2igd5OxnH8T_46zg9LRoI35J5AdqGbW3dcX-qYibUNFoDWRazIGZoVH&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "0b5c6126948a5e7ba8c6329ddfd5b671"
+    },
+    {
+      "postId": "1330721625069325",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330721625069325/?__cft__[0]=AZUswqupUBMK7IE5j07Ea8wlEQ2AQ-PMPhRtWqPxelaqc3KyBLJPeWaqcsT7LfO9pS72mu3PfBRDWTq0B851NxEiZBWkvqqG1bIFxrOmKnuKXNnwZOX22L3XnBZRdzDm0QI1dRbP4ES63DpgVsXkiUEGD6Gn0ZkaKfHRNs5ceimFynor3spmG2qIwjFzNceQeh7zMI29J9bKn1u8AZvBCj0w&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "a60df1cbd32ab0d7752d1145d24608b9"
+    },
+    {
+      "postId": "1331002395041248",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331002395041248/?__cft__[0]=AZXQBrYF3MCwO0oVp6YG10ELPt16L61G5LANV-RgQyIy2fKwjlBtPf-pLp_7dpX1ZiOADhsD3Zg197sNboEXn5ug9IBl8J93PwlsOY8hbpWCj5FhpUmfiAZ0LTvHvbS6I4VGXqRTyLiptylonEjhK99GC7DEL-HI0rVRxTQwNGVCOXSDIRGtpYvtwQslOAZgO0p0Utx0mdRSUlZAuyadDXqM&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "e5c381e061af401f3c20402ae15f33d0"
+    },
+    {
+      "postId": "1330935028381318",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330935028381318/?__cft__[0]=AZWGO4iDAK3F0OTXjQRzl4USHue4nwC1XX1RRIT3k_p0pERhfIGSZ2JQ5HLO09TiToGsao-nTeTpTutld_z2rFmTaNse72m7yWHvx2NyjkPRsU0tQkeEDiKluLcrOPaQnUU0YaQiJrnQxVVbpafNMc0dKQTNaWetzRz4UhP2_WBZS43_teppNSa0tTjsGobc4b9Rvqhov2GmiZBxg8Sy1j43&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "7e42497d9db06431f0b25ff66c75d143"
+    },
+    {
+      "postId": "1331011105040377",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331011105040377/?__cft__[0]=AZVJlBlxXhF9iRYNZ3JHV6PFJLzQbp-z6xb3784WnWNO9uog_y1FJeAXb9-IPnOY8rEmHNjMiiNpyHFJoCGAn2cPolk54Jt6WKRb08_P99QGkKw4MCjw6Re5yS1OlgCEWXbf7t6NSBl-I6Lus0d77ArsSTIE-Hy_Gie916tk4B_l7FOiFlIr89oxEhU6iymzSiT5Qme7zfTrCv7KgHMSgPaE&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "586de7e3feca8e0cb79f9d098da65835"
+    },
+    {
+      "postId": "1331033425038145",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331033425038145/?__cft__[0]=AZVEEpPMr2xmP8yFk7fw8Hjy8ZQrKz1NZmrM0Ioj236-4f1oC7ZeNvMbE1N9qcP8f81agprxg1wstyGmQRGBwf-CSsFfP3HSai-gL4sCsSBdDztMGYWt09Qiy4gnmEhCvUw-JC9zpeJhlCIeonH_Ap0Qu9xPbmEShf9x1eA2RG5fMpSvzs6zLuXz7X_xz4Uym_kGTZZTVj-RVLVYCLsgSy8A&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "54cd353a64149c101ed9b94b77ea8555"
+    },
+    {
+      "postId": "1330767241731430",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330767241731430/?__cft__[0]=AZWfZ-Day5AzbjhPMJ881CnBESpvl6JqQy66EPPelHoQ5Qz-2JO1Do-VM6JsCe905nkKH82BrwVjooKOYhemBpmUdEZDus4v3H2kkjp08uuDJ3NcYmSdf6AR3nZWn-3v9vhvj0i5ROMPmlXz32ppUBjUX5jUhb7Znn4Oz4bcZFBcNIW5Ob-XvGUd1a6UBvkJFtdnyVg4xQJVJ4DOdI6oeEf9&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "bf89ea53237db24eb2f8422e169a1398"
+    },
+    {
+      "postId": "1330938115047676",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330938115047676/?__cft__[0]=AZVl3NfhMYnB_W0enYJr6c3zqyhYga-s6kf3bvh8qtWta7W1hFOwlYqzL5LdSwFQ49RMmr0-IlevKBwncvAT0z852wM7Cq1OvY8UqglHp5jjhaxdXQ-pSl7_o5G6-8dFeSHpqZLby9qsRc_w0PeVuxX2QHLSHSQ1WxPtsNYGiVHZHGKP4RqECqD7G8UYfOtKoVPSLLhmI24dt_pMhuJTjt2W&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "48fcf328c3c1ee978219a2f8c857eedf"
+    },
+    {
+      "postId": "1327510342057120",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1327510342057120/?__cft__[0]=AZXabHGBBRB2flYY99-s2TzcHPXu4RKyxOqwYMlncYapqDqod2AO-sNdOsYUGdpsKwv7ro8Cn2TxqXEuXu8FxYF9IJ0oyQvfgDvUZ8B5__CbqPsKieEq5mDaC4qze-yesPk5K3gfhEpK2xxStxw2yNxJMhn98N9qiUotNFz8swWA-t-TE455xvIxBj3fdu2PGrJALNTWOfmZjJOgWVCs171H&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "c76028880909b928020ecb2d86336cee"
+    },
+    {
+      "postId": "1330999925041495",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330999925041495/?__cft__[0]=AZVxYIvJyRysUsBehz-avW_YiMYLqlUOzqHZpVanAe0hqu96jOSchtnF33I1OPMBBmxgpRDKeEvHSJZpj2KC6irgv72beQtJn4tjMGMixupFLmQmA436Hb7-tliExWJOhzzfD1M5xb65x_ZWvXXB6FNIrqfaUB8DtMdlUfLA4HczOb9rDnGbYuSkwGlYVe8BmutIfpoCpxgMFIgR5bUCVRGr&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "cda0bf9a14f0ca8e1e5352cdca90b96e"
+    },
+    {
+      "postId": "1330116525129835",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330116525129835/?__cft__[0]=AZXSrQSQJlMryIqChFi_iyP1yd12AM4455Wd0eK7QwFfuJTliZq_knZv35coqu9GSc1UsG6tiRmK-_ec4pntN7vUd3pNIko1lT03KFRGXZjAviHkS2CLOCsI-kzhJzwSIiH9K66PKFGU59oPsYq8RrOC-3smJVny5wEXWFZRPRYCW4Ora-atz3kVrI18sUArnse8fQ-0KAGt1S1IjzMJi9Gk&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "545e357d2338814260129faaf000c1ab"
+    },
+    {
+      "postId": "1330608445080643",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330608445080643/?__cft__[0]=AZWJDNFM7wGE7GjEKUMHrA0Js6cDkDNlT__1v3vFL94KlmSnuQ5dRxPHn2u73NyhtN4I9K_JtBOv2sjnXD-5bAuAxxRHgXnrivKsoE1zeJwtfk3PRqHJufCXr89hvFfx7Qvpvstm04EuPh9AC8YtYhfRQ8yIzjaRShCYjvuXuzcHXrQLKCDiR6ANpLZphw6Euo6f9nzov-pnX2dQBO1d5apc3PQjYh1kWWGabl4_JSP0eg&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "4c161c147dbdfc4130a8c6c0a2dbaed6"
+    },
+    {
+      "postId": "1330794555062032",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330794555062032/?__cft__[0]=AZUBpV3NfmDFUXk9ateyp86dhO2ff7yL935WkeYMkbGGoM_WkIPNvOVGJpqBTJ4cgKSvtgOGPdlzrsqabKKJcbJfRV-QT8iIvBUhZBKlNVPLVR6djCuy2mpPxBQL9wkdJ8a4ZHYnBC1ZUbM8YZIf0HSR79y7iiP3DlVzH1yPH0-89f0RqMGtl0n80i0ya7zJhZVtxuF4njMSs9rqaia5xeZI&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "8461d8c82889551db595e3238f65c3f9"
+    },
+    {
+      "postId": "1330964945044993",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330964945044993/?__cft__[0]=AZV7F5-8Z0cMD6LCnYg0JCics1kP6wv-qSq0Z8iiM0Mh9WjhFx_UEijPV6AFA5hzRpPG7HQctizLsaun2Df24P9CjA3BhwTTf03Ii8M6SLbDxJetnWxyQlEU75uLXy6rfcCQGYB5Q2FzDt3WF_MNRLAAaTnI6Jvas7RIljHBdNPbSXdBFCnhlSL5bIh7SV4Lu3QX443B1MWRS3hn_6WZGTKW&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "bbf96ab3fa0a979bca202e9970281e63"
+    },
+    {
+      "postId": "1330935761714578",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330935761714578/?__cft__[0]=AZVgXm4_9FZoznAV0hOD8fj0JKfZac8q2O7GuzNM6Ny86E5pdtXMfLGPsGx2DpLBSG0NG42iIFGqyf5-hkPLkn5ENZPIrRJe_zUEHVqRbpTl_Tmi_QPmj9arkGqdkI-PwBQtvI-RIMA6aZcHnvtHy4uMKLKi1UEOEXvV46YQLC55bCRBciVrwF-46RRR3CKh3_nw5-vjbldlZ7XToGgx-3wa&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "a86a6e7bcb741a8dc11d19ca73ad399b"
+    },
+    {
+      "postId": "1328787001929454",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1328787001929454/?__cft__[0]=AZXMEi78Hbhjmz295PDMptUe-pUE3DZsZokBfaTGzyFdMpcQFnO8J7L85GnfIFXuG88FkDuYaIv9PqtRyuSjZCTz37QInO9ACvaw88n-psz53a1v7KyutUQDKj9mIV-pX633JUb5iMGgEhkKMS63N6TcacNr9P9xAYREkFz6zV3KgPJ4prrnPCa7lx9lKuPw-YvvLBxzQCYr0jm6qqBK8Zex&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "27046dfb76daa0458621ddfb2a68e720"
+    },
+    {
+      "postId": "1328302818644539",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1328302818644539/?__cft__[0]=AZXSN9nRoqkvvFpyihi7otLlrIg2EVuE_wjn9JbzjJj6Xnb4_mzENl4Oc_irRIcl_0bntXm9oOhe9R5pkHshrO2-nwxSk6cfsgkeCxCL9byIDkedjyp8wIfvms3W0aDvZHyr-BGy1Pu987lI_j8sKnzimVWZj1DN8P7JnGJfe-3bBGkdf42TU-dPr3gMQSu0xJUerDlOSkrpBn9JeKxUZSh6P12ZZhaIGPL8isD9nSIfKw&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "c7b8dbf89240b2e57b13fba81a58c5ce"
+    },
+    {
+      "postId": "1331030645038423",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331030645038423/?__cft__[0]=AZUZkj4uhfzVvxgYS6ij5PcoVe_B5UuQlTMAC2C8N5ICTHD6k6q0hBe3aOb9x9TQJVrbtD_LyZVkFOVnio0ekoqb_Xqe1yGn9gTlYif95RhiMTyDqj_Pt4rCN-EARWXV-G_SkNym9hKaYpSl-s-nnQNh0068GMsp9aN0M1MWiiNW980wu7oRzEZY_KjVNef6Kn67I9GsfTjR8S0IswGCZbP7D_DJ6sfzVOc10qVL82PBiQ&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "e547657291d641baa6239b7a5fc06bb3"
+    },
+    {
+      "postId": "1329895758485245",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1329895758485245/?__cft__[0]=AZXb03dzFLs1MOd23PnlA0xoZ0z6QePnc9K0VkPP8iOycptXw70hFHt-3gvYmcHPtFKaGqcr7KY1WwLfnICmtQU_9IPFr3To-VN87umnZsOWw4HAlYSymThJ8iewFQ9SMxS9HFddmY4fQz5-MKO8oLCTg3w_M-vgc-F4cSsfsnF4nGmUPVC5yG3dj9n80qPs4BdI_lfon3019SVYwcTL50Zj&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "0dcf7489d8f557c8501af36e483879ad"
+    },
+    {
+      "postId": "1331030255038462",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331030255038462/?__cft__[0]=AZVuAVGenUuVeyeSsv3-nsFctmQBR6L8R9PG-s7P1S378fkzsl_63RIlZDGM72KtB9AXDwHdqcfu4fqszsFlnewnip6czEYhx_2p393TdteVWdZUtUr6m03gNyJO63u3D8JXp66oPKFlMUFStER-pa-xqQlPznqBmZwaOqwW6lZvb2adCzRXRXwLCjGCVqtqpZw&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "3b9ada2a3637178e42d3d4d09e3a9e39"
+    },
+    {
+      "postId": "1330618318412989",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330618318412989/?__cft__[0]=AZXcOCsaAwCdGmripJnsxGLP0PxDmnb1Y-Yvpm1PgCtGJrmclbUJRBbLSkDXTQfnPri9RT9012rpSYtFsRs9rSWa_Nfah0rCGhOb1z_sMaSqK_w7T79sobKTytgICITK6vQSU5uYqNbffAtsf5s5PIiKIQtwjBMJ890iDOgoQyKQdawKYXhNBJ4flamm72iwSWcdkORNMc-kBoX3U382MB8t&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "3d2e13427f6254a34df023db34e5030e"
+    },
+    {
+      "postId": "1331019708372850",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1331019708372850/?__cft__[0]=AZWobF4Mp1nPy923_6lvozXmCnFkY0EtwVuToDxC9dXYA5p82h18Gih8pLoFHH8M-95z-N2f20pij6pnt56inNQsN2UvdFlMTqKkDlajw3Ptat2VcCHnulthOyp0V3XiGiiGpJSJNfFSPjSCIlRwHZAuApnPWsZj5i3SKG5Vxkr2NM0fY6HmcPrxySOYFObmbg0&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "42b46c10d0571eba8fa9a50334a3c43a"
+    },
+    {
+      "postId": "84",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/84",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "40e972848181ed63d9ad7200cfac7ee7",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "85",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/85",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "4eebd38bca25d58dd40a0901352fceb2",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "86",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/86",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "49d1f590b8728033e576e00b48e3a28d",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "87",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/87",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "5b9e15dd3bbafdee54a432035ff3c4c1",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "88",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/88",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "d9bdd2dc05db0e7123539c7008ce630c",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "89",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/89",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "5d3ba4f8954fa5e2c7c4c135307428ef",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "90",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/90",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "8ac8d150d1c12a3db51bd7c778d061a7",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "91",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/91",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "d0872cc9d06b0474b83535d770b6018c",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "92",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/92",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "c8d7d8c8209a2697e9688b224dd08af1",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "93",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/93",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "3f952b5a4d2114e871defffd7f5a137b",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "94",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/94",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "b14c82201db825504a24f96f657c3391",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "95",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/95",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "0619fb39b26d59115c0682a7f297024c",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "96",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/96",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "abe5e57ed2f2e5d3a8d5674da42fa131",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "97",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/97",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "be8eb1c4d9b096f487c3705e449aec82",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "98",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/98",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "6b2d3e5b66b12c588c2c20cc249dc3c8",
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    },
+    {
+      "postId": "1330954525046035",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330954525046035/?__cft__[0]=AZVwhewCMvADi8vVzwF9042mcnvoVtxByQOCxYXAhTMXwztbLKv5WbuuGXraCtg71rGa9QOFgNcrwhLKfEMfjSnI4y5mTkAw3PgGHFE4poaA7dXG7kIrs61hDPLE3ZY6t-hrSrlVIo5YVyDywiw-_cTldANjkFF1MlPUhrHMVkCyiAnu4sYUk2sN2i477w3I51rM8jtPDv7Yt94WFM_k_egP&__tn__=%2CO%2CP-R",
+      "success": true,
+      "alreadyProcessed": false,
+      "commentPosted": true,
+      "hash": "3af037e71967f7a62d66b32a163a982c"
+    },
+    {
+      "postId": "100",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/100",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "e95c52432dd68f04106cb3a1568582ff",
+      "error": "locator.waitFor: Target page, context or browser has been closed\nCall log:\n\u001b[2m  - waiting for locator('div[role=\"dialog\"][aria-labelledby]').first() to be visible\u001b[22m\n"
+    }
+  ]
+}

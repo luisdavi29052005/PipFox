@@ -482,7 +482,7 @@ export async function testSelectors(options: SelectorTestOptions) {
 // CLI INTERFACE
 // =============================================================================
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   async function main() {
     const { getTestIds } = await import("./helpers/getTestIds");
     let { userId, accountId } = await getTestIds() || {};

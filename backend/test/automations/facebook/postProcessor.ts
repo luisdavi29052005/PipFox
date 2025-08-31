@@ -234,7 +234,7 @@ export async function processPosts(options: PostProcessorOptions): Promise<Proce
     posts,
     webhookUrl,
     headless = false,
-    commentMessage = "Interessante! 👍",
+    commentMessage = "Hi! I’d be happy to help you with this. If you’re still interested, please send me a private message so we can go over the details.",
     pauseBetweenPostsMs = [2000, 4000],
     processedHashesFile = path.join(__dirname, 'output/processed_hashes.json')
   } = options;
@@ -358,7 +358,7 @@ export async function processPosts(options: PostProcessorOptions): Promise<Proce
 if (require.main === module) {
   async function main() {
     const inputFile = process.argv[2];
-    const commentMessage = process.argv[3] || "Interessante! 👍";
+    const commentMessage = process.argv[3] || "Hi! I’d be happy to help you with this. If you’re still interested, please send me a private message so we can go over the details.";
     const webhookUrl = process.argv[4] || process.env.WEBHOOK_URL;
 
     if (!inputFile) {

@@ -23,10 +23,16 @@ export interface RunnerInput {
 // Controle de workflows em execução
 const running = new Map<string, boolean>()
 
+// Controle global de posts já processados para evitar logs repetidos
+const processedPostsGlobal = new Set<string>()
+
+// Função sleep para pausas
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 // Atualiza a função sendToN8n para aceitar mais dados
 const sendToN8n = async (webhookUrl: string, data: any) => {
   if (!webhookUrl) {
-    console.log('[runner] ⚠️ Webhook URL não configurada, pulando envio')
+    // Webhook não configurado - silencioso
     return
   }
 
@@ -42,9 +48,10 @@ const sendToN8n = async (webhookUrl: string, data: any) => {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    console.log('[runner] ✅ Dados enviados para N8n')
+    // Log sucesso apenas em debug
+    // console.log('[runner] ✅ Dados enviados para N8n')
   } catch (error) {
-    console.error('[runner] ❌ Erro ao enviar para N8n:', error.message)
+    console.error('[runner] ❌ N8n erro:', error.message)
     // Não propagar o erro para não quebrar o workflow
     return
   }
@@ -59,23 +66,31 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
   }
 
   const context = await openContextForAccount(userId, accountId, headless)
-  const page = await context.newPage()
 
-  for (const groupUrl of groups) {
-    if (!running.has(workflowId)) break
+  // Processar todos os grupos em paralelo
+  const groupMonitors = groups.map(async (groupUrl) => {
+    if (!running.has(workflowId)) return
     if (!context.browser()?.isConnected()) {
       console.log(`[runner] ❌ Contexto do browser foi desconectado, encerrando workflow`)
-      break
+      return
     }
 
     console.log(`[runner] ▶️ Monitorando grupo: ${groupUrl}`)
 
+    // Criar uma nova página para cada grupo
+    const groupPage = await context.newPage()
+
     try {
-      const monitor = monitorGroup(page, groupUrl, workflowId, running)
+      const monitor = monitorGroup(groupPage, groupUrl, workflowId, running)
       for await (const post of monitor) {
         if (!running.has(workflowId)) break
 
-        console.log(`[runner] 📌 Post ${post.contentHash} de ${post.author ?? 'desconhecido'} encontrado.`)
+        // Log apenas uma vez por post único, não para cada node
+        const postKey = `${post.contentHash}-${groupUrl}`;
+        if (!processedPostsGlobal.has(postKey)) {
+          processedPostsGlobal.add(postKey);
+          console.log(`[runner] 📌 Novo post encontrado: ${post.author ?? 'Autor desconhecido'} (ID: ${post.contentHash})`);
+        }
 
         // Enviar dados estruturados para o n8n
         if (n8nWebhookUrl) {
@@ -90,15 +105,12 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
               contentHash: post.contentHash,
               extractedFromModal: post.extractedFromModal
             },
-            groupUrl: groupUrl,
+            source: {
+              groupUrl: groupUrl,
+              groupName: `Grupo ${groupUrl.split('/').pop()}` // Extrair nome simples do grupo
+            },
             workflowId: workflowId
           }
-
-          console.log(`[runner] Enviando dados para n8n:`, {
-            author: payload.post.author,
-            textLength: payload.post.text.length,
-            imagesCount: payload.post.images.length
-          })
 
           await sendToN8n(n8nWebhookUrl, payload)
         }
@@ -109,11 +121,19 @@ export async function runFacebookAutomation(input: RunnerInput): Promise<void> {
     } catch (monitorError) {
       console.error(`[runner] ❌ Erro no monitoramento do grupo ${groupUrl}:`, monitorError.message)
       if (monitorError.message.includes('Target page, context or browser has been closed')) {
-        break
+        console.log(`[runner] 🔄 Contexto do browser foi fechado para ${groupUrl}, finalizando monitoramento`)
+      } else {
+        console.log(`[runner] 🔄 Erro recuperável em ${groupUrl}, aguardando 5s e continuando...`)
+        await new Promise(resolve => setTimeout(resolve, 5000))
       }
-      await new Promise(resolve => setTimeout(resolve, 5000))
+    } finally {
+      // Fechar a página específica do grupo
+      await groupPage.close().catch(() => {})
     }
-  }
+  })
+
+  // Executar todos os monitores em paralelo
+  await Promise.allSettled(groupMonitors)
 
   await context.close()
   running.delete(workflowId)
