@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "userId": "3df65892-3b1e-43aa-a80b-ee5fc2309030",
+    "accountId": "68abd4e0-ceb4-4ec3-bef4-d8a96054ee98",
+    "workflowId": "workflow-1756595597579",
+    "nodeId": "node-1756595597579",
+    "prompt": "Prompt padrão para processamento de posts",
+    "totalPosts": 10,
+    "processedCount": 10,
+    "successCount": 0,
+    "skippedCount": 0,
+    "timestamp": "2025-08-30T23:13:17.584Z"
+  },
+  "results": [
+    {
+      "postId": "1330940085047479",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330940085047479/?__cft__[0]=AZUx2GwEL8QfAEeow1ioAG0KbnCbB9_7_IAKJJHnwsWD3mrFPhKg9kD5N2Mx5BzovMM2V1xoXeyIsV8PEUdiZt1edmtxmtrXSDyOiHDNzW1YZftZV4egCHk5LTyu7ab8Xa2r5zlYRokQRgonCut2DOmMr56UBWIdoYAvDptf8Hs8JHwYfpPOyRECD6gr-AxCDmXMmY4QY4HYAFwr6c1eeA8Pf7NSV08NPYfI03QJZ3GQKg&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "f9f249bc5c6db2f2664e35b396282109",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330938115047676",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330938115047676/?__cft__[0]=AZXD8tsPtkB_E52RT9hcUmGSYFY3NS5yuf1oQzluFPUKELVS7QQeQmZOtlo5d54sJoiDFQcTy6mOctH88cbCKLyxSgNIQMgTf9-5sp7lDjlyGa3mgU6Aso9hT6DII3rNEgFBVCfTRtXaoxTt3mogg5Q76H2eSwp7pIy3_GKwcf4f0XLd6NMVhR39UA2711ebPP6LiYTFqowI5Q3Kiu7hnBn4&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "04193e4c261461f8c49b8cb2156e63e3",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330767241731430",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330767241731430/?__cft__[0]=AZVTpCh4_QX2Il5yiDcme4YkV6oERJDmunA5-t5r7mvaS0VjOhUx1fsk5RkeX0CUSgeGfxETxZKGHIW5NG4IxjM20ZGrEuBZ9N7p2XH6dFgQCcUc3NXtnQjXv-QGV1ndJWvsHIiTed-VysYBEdM6fLt6-fiYkGOdA_nvPBqaROaKQmxqXmTndGzZaTnBZFGylLSddu5fAaeBoSPfaFZVhBeN&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "36101d405c6501b810f5152cc2e96920",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330930475048440",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330930475048440/?__cft__[0]=AZXPAtGw-DeQojH2hEP4NbyIQ_wZme1ax83lOReon4wUzQCvN1tpA5Iti0MfkYSChUg6r6PZ7-48YyQYb3Ld5yJzbhuMiQsRrMnoOSp5MglLN6dvnIDVS7c3mhBn4-ZZflSy2Pdz-RScIT9P_IfWJHWV9ifjjMUmm2Z6H12Cb-oRxQNdKD7Bw6v_M_U9WApQJQCKD1daLKSSO1E5egls9UAyDkg3eI6gdbup-arDAbSM_w&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "753f17481601fbeac52a95fcf6844b9b",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330743125067175",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330743125067175/?__cft__[0]=AZWBHVqq3zFk0nHonet8R5i-akaOJHetpAKMbiTmJo-XVV69gi3qZXIUv9umfDXrhlsmEvnaNU4g5hzmYmkjG2JELNeLuhMP1i_MX5bE2F-tffYSUwLZ5k8pbBx56LnNZwirxjODVbR4d0X254mACTMdm1GkATpY3rHVuq-xpVdinLh1WbgtKyS2nsUVwRnOdrYg16Qu6sgiu-81nYwT28Ph&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "3572542e7464cab2202a8385ba7440af",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330936848381136",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330936848381136/?__cft__[0]=AZXxgTYP1wJeTob6_NsJ1yBUraAcsUe_7ooLocyT1KYQ6USVCViua30wMc6iLnlwAYeL6NBF8tPv8F7rFDhE6VoPC8yv0EfOh6hFybLphlINP6l0kU6ww8S6qAofKjSIn-8urr-oRkiL0h5xeVNtiXaY2b9rlfhIeWCiRBpMyMz0gPLKZSxKAqKj3xpJf8Z7w0jG6aYG3B_qB5eM-oT8hGWT&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "43a803d077c878021a4cc431265e422e",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330870618387759",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330870618387759/?__cft__[0]=AZVl3C6WboDece88-IAb2uclCBVYwfqMfw4ViAnFp_87Ydhs0x3STLip0OowMYTAwDG9xoUZXUxdl51UH79epReEQlhkgyjDGdE6UyCLpg3WFcipiS1lKYJIvXpBWxHYvGDFG5lRHTOn0jV6QPW2SwhuG_rOAX4QCs-ORdbFkowsX6i-j-nixBUWqM5gJfoOBUrkC7ZoowC8NO1vqM5aKkkX&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "eef824d2269c707128424b1475a32408",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330768208398000",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330768208398000/?__cft__[0]=AZV6vAy2FO_GhWjH0XY0CaiHeS9bU-A2dyF8uaWFwTDqj5Xhhxp-aAySiDAGM6UOD8BsoTBG8ekJERAK84hWZ-IqklXtDkfHCSBgQ4tOD7akpY81MPH5O5LUyR6BkESOePiddHke7mBg69Xc9AowRRMoa2s25zHdujh0uc6I-LXLz1D6vW1V1KZMZbrPiKVLpBKVA5eO2Vhf5XOSvlbgmCm-&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "70180f304640180b2000e5e2c79b0919",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1327133318761489",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1327133318761489/?__cft__[0]=AZXl6Ufr7gQBdFzDX1NhaetXradulFFpx2CfKJhWUze80Imehtf9eCuPMub4-nJmINV_OzeUlS9EAYdZbaS5UqNq04Q2y_M0u8y5HHnOqSSbqRmFrCzAG1Pl1pnjPthX871rWpwo9F3XEPAEWK7Yc9rDNE3kzY1UIY5YbSHcZke7qEzmnMlMmsA7TmuhJSbBTZgmH8V2CASZYLKBh6c3vNoD&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "fa61ba909ce9a9858e6b90c356f03c1d",
+      "error": "page.waitForLoadState: Timeout 15000ms exceeded.\n=========================== logs ===========================\n  \"load\" event fired\n============================================================"
+    },
+    {
+      "postId": "1330939528380868",
+      "permalink": "https://www.facebook.com/groups/940840924057399/posts/1330939528380868/?__cft__[0]=AZWSy-eqV27PDcxq3udglZYVAGKiqQeRwOTRCvxF2avCAHrC7b9HDZ8QHPrlCXqtC0ivab_lfpxF-ZIZntw62jKG-zB5LlG5MzL255lFe4USNeP_Fhpt4kn16SSrvpmTVShvTbKGmNISmWZDhfgTywLEqcML7AjSVsuQlsSi1Cu5ZlWtE0Kc6Oc-XGRhDjBLC-iTLQJoCKRI2ois1GDSL_GH&__tn__=%2CO%2CP-R",
+      "success": false,
+      "alreadyProcessed": false,
+      "commentPosted": false,
+      "hash": "2b21caf30fe2c1362e5975645c85e6a5",
+      "error": "page.goto: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://www.facebook.com/groups/940840924057399/posts/1330939528380868/?__cft__[0]=AZWSy-eqV27PDcxq3udglZYVAGKiqQeRwOTRCvxF2avCAHrC7b9HDZ8QHPrlCXqtC0ivab_lfpxF-ZIZntw62jKG-zB5LlG5MzL255lFe4USNeP_Fhpt4kn16SSrvpmTVShvTbKGmNISmWZDhfgTywLEqcML7AjSVsuQlsSi1Cu5ZlWtE0Kc6Oc-XGRhDjBLC-iTLQJoCKRI2ois1GDSL_GH&__tn__=%2CO%2CP-R\", waiting until \"domcontentloaded\"\u001b[22m\n"
+    }
+  ]
+}

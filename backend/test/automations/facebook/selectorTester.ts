@@ -1,192 +1,16 @@
-import { chromium, BrowserContext, Page, Locator } from "playwright";
+import { BrowserContext, Locator, Page } from "playwright";
 import { openContextForAccount } from "../../../src/core/automations/facebook/session/context";
 import { processPostWithN8n } from "./helpers/n8nIntegration";
-import { postComment } from "../../../src/core/automations/facebook/actions/postComment";
 import fs from "fs";
 import path from "path";
 
-// ===== Helpers =====
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const rand = (min: number, max: number) =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
+// =============================================================================
+// TYPES AND INTERFACES
+// =============================================================================
 
-function extractPostId(href: string | null): string | null {
-  if (!href) return null;
-
-  // Remove comment_id se presente na URL
-  const cleanHref = href.split("?comment_id=")[0].split("&comment_id=")[0];
-
-  // Padrões para extrair ID real do post da URL (ordem de prioridade)
-  const patterns = [
-    // Padrão específico para grupos com set=gm.{ID} - PRIORIDADE ALTA
-    /set=gm\.(\d+)/, // set=gm.1324567052351449
-    
-    // Padrões tradicionais de posts em grupos
-    /\/groups\/\d+\/posts\/(\d+)/, // /groups/123/posts/1324567052351449
-    /\/groups\/\d+\/permalink\/(\d+)/, // /groups/123/permalink/1324567052351449
-    
-    // Padrões gerais
-    /\/posts\/(\d+)/, // /posts/1324567052351449
-    /\/permalink\/(\d+)/, // /permalink/1324567052351449
-    /story_fbid=(\d+)/, // story_fbid=1324567052351449
-    
-    // Padrões para URLs de foto que contêm o ID do post
-    /\/photo\/[^\/]*\/\?.*story_fbid=(\d+)/, // URLs de foto com story_fbid
-    /\/photo.*set=gm\.(\d+)/, // URLs de foto com set=gm.{ID}
-  ];
-
-  for (const pattern of patterns) {
-    const match = cleanHref.match(pattern);
-    if (match && match[1]) {
-      const extractedId = match[1];
-      // Validar que é um ID global real (pelo menos 10 dígitos para IDs globais)
-      if (extractedId.length >= 10 && /^\d+$/.test(extractedId)) {
-        console.log(`✅ ID global extraído: ${extractedId} via padrão: ${pattern}`);
-        return extractedId;
-      }
-    }
-  }
-
-  console.log(`⚠️ Nenhum ID global encontrado em: ${cleanHref}`);
-  return null;
-}
-
-// Modal detection and auto-close functions for feed-only mode
-async function detectAndCloseModal(page: Page): Promise<boolean> {
-  try {
-    // Common modal selectors
-    const modalSelectors = [
-      'div[role="dialog"]',
-      'div[aria-modal="true"]',
-      'div[data-pagelet="PhotoViewerModal"]',
-      'div[data-pagelet="MediaViewerModal"]',
-      'div[class*="modal"]',
-      ".fbPhotosPhotoPageModal",
-    ];
-
-    let modalFound = false;
-
-    for (const selector of modalSelectors) {
-      const modal = page.locator(selector).first();
-      if (await modal.isVisible({ timeout: 500 })) {
-        console.log(`[detectAndCloseModal] Modal detectado: ${selector}`);
-        modalFound = true;
-
-        // Try different close button selectors
-        const closeSelectors = [
-          'div[aria-label="Fechar"]',
-          'div[aria-label="Close"]',
-          'button[aria-label="Fechar"]',
-          'button[aria-label="Close"]',
-          'div[role="button"][aria-label="Fechar"]',
-          'div[role="button"][aria-label="Close"]',
-          'svg[aria-label="Fechar"]',
-          'svg[aria-label="Close"]',
-        ];
-
-        let closed = false;
-        for (const closeSelector of closeSelectors) {
-          try {
-            const closeBtn = modal.locator(closeSelector).first();
-            if (await closeBtn.isVisible({ timeout: 500 })) {
-              await closeBtn.click();
-              await sleep(500);
-              console.log(
-                `[detectAndCloseModal] Modal fechado com: ${closeSelector}`,
-              );
-              closed = true;
-              break;
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-
-        // Fallback: ESC key
-        if (!closed) {
-          console.log(`[detectAndCloseModal] Tentando fechar modal com ESC`);
-          await page.keyboard.press("Escape");
-          await sleep(500);
-        }
-
-        break;
-      }
-    }
-
-    return modalFound;
-  } catch (e) {
-    console.warn(`[detectAndCloseModal] Erro:`, e);
-    return false;
-  }
-}
-
-// ===== Session/Login guard =====
-async function ensureLoggedIn(page: Page, groupUrl: string) {
-  // Tenta encontrar o feed primeiro, se já estiver logado
-  try {
-    await page
-      .locator('div[role="feed"]')
-      .first()
-      .waitFor({ state: "visible", timeout: 8000 });
-    console.log(">> Login já ativo e feed visível.");
-    return;
-  } catch {}
-
-  // Lida com o banner de cookies se ele aparecer
-  const cookieBtn = page.locator(
-    'button:has-text("Allow all cookies"), button:has-text("Aceitar todos"), button:has-text("Aceitar tudo")',
-  );
-  if (
-    await cookieBtn
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false)
-  ) {
-    await cookieBtn
-      .first()
-      .click()
-      .catch(() => {});
-  }
-
-  // Detecta a tela de login
-  const loginHints = page.locator(
-    'form[action*="login"], input[name="email"], input[id="email"], div[role="dialog"] input[name="email"]',
-  );
-
-  if (
-    await loginHints
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false)
-  ) {
-    console.log(
-      '>> Faça o login e clique em qualquer botão "Continuar" ou "Agora não" que aparecer. O script vai esperar...',
-    );
-
-    // Espera a URL ser a do grupo
-    await page.waitForURL((url) => url.href.startsWith(groupUrl), {
-      timeout: 180000,
-      waitUntil: "domcontentloaded",
-    });
-
-    // Espera o feed carregar
-    await page
-      .locator('div[role="feed"]')
-      .first()
-      .waitFor({ state: "visible", timeout: 30000 });
-
-    console.log(">> Login completo e feed carregado. Continuando a execução.");
-    return;
-  }
-
-  // Verificação final
-  await page
-    .locator('div[role="feed"]')
-    .first()
-    .waitFor({ state: "visible", timeout: 60000 });
-}
-
-// ===== Extract data from posts =====
+/**
+ * Estrutura de dados para um post extraído.
+ */
 export type PostData = {
   postId: string | null;
   permalink: string | null;
@@ -200,1562 +24,9 @@ export type PostData = {
   externalLinks: Array<{ url: string; text: string; domain: string }>;
 };
 
-// Robust timestamp parser following document guidelines
-function parseTimestamp(rawTimestamp: string): string | null {
-  if (!rawTimestamp) return null;
-
-  try {
-    // Normalize the timestamp
-    let normalized = rawTimestamp.trim().replace(/\s+/g, " ");
-
-    // Handle relative timestamps like "4h", "2d", "1min"
-    const relativeMatch = normalized.match(
-      /^(\d+)\s*(h|min|m|s|seg|hora|dia|day|hr)s?\s*(ago|atrás)?$/i,
-    );
-    if (relativeMatch) {
-      const value = parseInt(relativeMatch[1]);
-      const unit = relativeMatch[2].toLowerCase();
-      const now = new Date();
-
-      switch (unit) {
-        case "min":
-        case "m":
-          now.setMinutes(now.getMinutes() - value);
-          break;
-        case "h":
-        case "hr":
-        case "hora":
-          now.setHours(now.getHours() - value);
-          break;
-        case "d":
-        case "dia":
-        case "day":
-          now.setDate(now.getDate() - value);
-          break;
-        case "s":
-        case "seg":
-          now.setSeconds(now.getSeconds() - value);
-          break;
-      }
-
-      return now.toISOString();
-    }
-
-    // Handle "Today at HH:MM" format
-    const todayMatch = normalized.match(
-      /Today at (\d{1,2}):(\d{2})\s*(AM|PM)?/i,
-    );
-    if (todayMatch) {
-      const hour = parseInt(todayMatch[1]);
-      const minute = parseInt(todayMatch[2]);
-      const period = todayMatch[3];
-
-      let adjustedHour = hour;
-      if (period && period.toLowerCase() === "pm" && hour < 12) {
-        adjustedHour = hour + 12;
-      } else if (period && period.toLowerCase() === "am" && hour === 12) {
-        adjustedHour = 0;
-      }
-
-      const now = new Date();
-      now.setHours(adjustedHour, minute, 0, 0);
-      return now.toISOString();
-    }
-
-    // Handle "Yesterday at HH:MM" format
-    const yesterdayMatch = normalized.match(
-      /Yesterday at (\d{1,2}):(\d{2})\s*(AM|PM)?/i,
-    );
-    if (yesterdayMatch) {
-      const hour = parseInt(yesterdayMatch[1]);
-      const minute = parseInt(yesterdayMatch[2]);
-      const period = yesterdayMatch[3];
-
-      let adjustedHour = hour;
-      if (period && period.toLowerCase() === "pm" && hour < 12) {
-        adjustedHour = hour + 12;
-      } else if (period && period.toLowerCase() === "am" && hour === 12) {
-        adjustedHour = 0;
-      }
-
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(adjustedHour, minute, 0, 0);
-      return yesterday.toISOString();
-    }
-
-    // Handle "Month Day at HH:MM" format (e.g., "Jun 15 at 10:30 AM")
-    const monthDayMatch = normalized.match(
-      /([A-Za-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/,
-    );
-    if (monthDayMatch) {
-      const monthName = monthDayMatch[1];
-      const day = parseInt(monthDayMatch[2]);
-      const hour = parseInt(monthDayMatch[3]);
-      const minute = parseInt(monthDayMatch[4]);
-      const period = monthDayMatch[5];
-
-      const monthNames = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      let month = monthNames.indexOf(monthName.substring(0, 3));
-
-      if (month === -1) {
-        // Try full month names
-        const fullMonthNames = [
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December",
-        ];
-        month = fullMonthNames.findIndex((name) =>
-          name.toLowerCase().startsWith(monthName.toLowerCase()),
-        );
-      }
-
-      if (month === -1) {
-        return null; // Invalid month name
-      }
-
-      let adjustedHour = hour;
-      if (period && period.toLowerCase() === "pm" && hour < 12) {
-        adjustedHour = hour + 12;
-      } else if (period && period.toLowerCase() === "am" && hour === 12) {
-        adjustedHour = 0;
-      }
-
-      const now = new Date();
-      const year =
-        now.getMonth() > month ? now.getFullYear() : now.getFullYear() - 1;
-
-      const date = new Date(year, month, day, adjustedHour, minute);
-      return date.toISOString();
-    }
-
-    // Handle "Month Day, Year" format (e.g., "Jun 15, 2023")
-    const monthDayYearMatch = normalized.match(
-      /([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/,
-    );
-    if (monthDayYearMatch) {
-      const monthName = monthDayYearMatch[1];
-      const day = parseInt(monthDayYearMatch[2]);
-      const year = parseInt(monthDayYearMatch[3]);
-
-      const monthNames = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      let month = monthNames.indexOf(monthName.substring(0, 3));
-
-      if (month === -1) {
-        const fullMonthNames = [
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December",
-        ];
-        month = fullMonthNames.findIndex((name) =>
-          name.toLowerCase().startsWith(monthName.toLowerCase()),
-        );
-      }
-
-      if (month === -1) {
-        return null;
-      }
-
-      const date = new Date(year, month, day);
-      return date.toISOString();
-    }
-
-    // Handle "HH:MM AM/PM" format (assume today)
-    const timeOnlyMatch = normalized.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (timeOnlyMatch) {
-      const hour = parseInt(timeOnlyMatch[1]);
-      const minute = parseInt(timeOnlyMatch[2]);
-      const period = timeOnlyMatch[3];
-
-      let adjustedHour = hour;
-      if (period.toLowerCase() === "pm" && hour < 12) {
-        adjustedHour = hour + 12;
-      } else if (period.toLowerCase() === "am" && hour === 12) {
-        adjustedHour = 0;
-      }
-
-      const now = new Date();
-      now.setHours(adjustedHour, minute, 0, 0);
-      return now.toISOString();
-    }
-
-    // Try to parse as absolute date
-    const date = new Date(normalized);
-    if (!isNaN(date.getTime())) {
-      return date.toISOString();
-    }
-
-    return null;
-  } catch (e) {
-    console.warn("[parseTimestamp] Failed to parse:", rawTimestamp);
-    return null;
-  }
-}
-
 /**
- * Robust post parsing using stable selectors and semantic anchoring
- * Following the architectural framework from the document
+ * Opções para a execução do script de teste.
  */
-async function parsePost(postLocator: Locator): Promise<PostData> {
-  const postId = (await postLocator.getAttribute("aria-posinset")) || "unknown";
-  console.log(`[parsePost] Processing post with aria-posinset: ${postId}`);
-
-  // Step 1: Isolate content container with multiple strategies
-  let contentContainer: Locator;
-
-  // Multiple strategies to find the main content container
-  const containerStrategies = [
-    // Strategy 1: Semantic data attributes (most reliable)
-    '[data-ad-comet-preview="message"], [data-ad-preview="message"]',
-
-    // Strategy 2: For group posts specifically (most critical for our case)
-    'div[data-pagelet="FeedUnit"] [role="article"] > div > div > div > div > div > div > div > div',
-
-    // Strategy 3: Profile name proximity (more specific for groups)
-    'div[data-ad-rendering-role="profile_name"] + div + div',
-
-    // Strategy 4: Common Facebook patterns
-    'div[role="article"] > div > div > div > div > div',
-
-    // Strategy 5: Fallback for newer Facebook layouts
-    'div[data-pagelet="FeedUnit"] > div > div > div > div > div > div > div > div > div',
-  ];
-
-  for (const strategy of containerStrategies) {
-    try {
-      const container = postLocator.locator(strategy).first();
-      if (await container.isVisible({ timeout: 500 })) {
-        // Verify this is not a comment container - more robust check
-        const isCommentContainer = await container.evaluate((el) => {
-          let parent = el.parentElement;
-          while (parent && parent !== document.body) {
-            // Check for comment-specific attributes
-            const ariaLabel =
-              parent.getAttribute("aria-label")?.toLowerCase() || "";
-            const dataTestId =
-              parent.getAttribute("data-testid")?.toLowerCase() || "";
-
-            if (
-              ariaLabel.includes("comment") ||
-              ariaLabel.includes("comentário") ||
-              dataTestId.includes("comment") ||
-              dataTestId.includes("comentário") ||
-              parent.classList.contains("comment") ||
-              parent.querySelector(
-                '[aria-label*="Comment"], [aria-label*="Comentário"]',
-              )
-            ) {
-              return true;
-            }
-            parent = parent.parentElement;
-          }
-          return false;
-        });
-
-        if (!isCommentContainer) {
-          contentContainer = container;
-          console.log(
-            `[parsePost] Using content container strategy: ${strategy}`,
-          );
-          break;
-        }
-      }
-    } catch (e) {
-      continue;
-    }
-  }
-
-  // Fallback if no strategy worked
-  if (!contentContainer) {
-    // Try to find the main content by excluding comments
-    const allDivs = await postLocator.locator("> div").all();
-    for (const div of allDivs) {
-      const isComment = await div.evaluate((el) => {
-        let parent = el.parentElement;
-        while (parent && parent !== document.body) {
-          const ariaLabel =
-            parent.getAttribute("aria-label")?.toLowerCase() || "";
-          if (
-            ariaLabel.includes("comment") ||
-            ariaLabel.includes("comentário")
-          ) {
-            return true;
-          }
-          parent = parent.parentElement;
-        }
-        return false;
-      });
-
-      if (!isComment) {
-        contentContainer = div;
-        console.warn(
-          `[parsePost] Post ${postId}: Using div-based fallback content container`,
-        );
-        break;
-      }
-    }
-  }
-
-  // Final fallback
-  if (!contentContainer) {
-    contentContainer = postLocator;
-    console.error(
-      `[parsePost] Post ${postId}: Using postLocator as fallback content container - may include comments`,
-    );
-  }
-
-  // Step 2: Extract author information with multiple strategies (CRITICAL IMPROVEMENT)
-  let authorName: string | null = null;
-  let authorUrl: string | null = null;
-
-  try {
-    const authorStrategies = [
-      // Strategy 1: Semantic data attribute (most reliable for regular posts)
-      'div[data-ad-rendering-role="profile_name"] a',
-
-      // Strategy 2: For group posts (more specific - MOST IMPORTANT FOR GROUPS)
-      'div[data-ad-comet-preview="story"][data-ad-preview="story"] a[href*="/groups/"][role="link"]:not([href*="/permalink/"]):not([href*="/posts/"])',
-
-      // Strategy 3: Common header patterns
-      "h2 a, h3 a, h4 a",
-
-      // Strategy 4: Facebook's newer patterns
-      'span[data-testid="story-subtitle"] a[href*="/user/"], span[data-testid="story-subtitle"] a[href*="/profile.php"]',
-
-      // Strategy 5: Direct author container for newer layouts
-      'div[id^=":"] > div > div > div > span > span > a',
-
-      // Strategy 6: Group-specific author container (VERY IMPORTANT)
-      'div[data-pagelet="FeedUnit"] [role="article"] div[role="heading"] a',
-
-      // Strategy 7: Author container with specific aria-label
-      'a[aria-label][href*="/user/"], a[aria-label][href*="/profile.php"], a[aria-label][href*="/groups/"]',
-
-      // Strategy 8: Author container with specific class patterns (Facebook's dynamic classes)
-      'a[href*="/user/"].x1i11i0x, a[href*="/profile.php"].x1i10h2o, a[href*="/groups/"].x1i10h2o',
-
-      // Strategy 9: Author in group context (SPECIFIC TO GROUPS - CRITICAL)
-      'a[href*="/groups/"][href*="/user/"], a[href*="/groups/"][href*="/profile.php"]',
-
-      // Strategy 10: Author in group context without specific paths
-      'a[href*="/groups/"]:not([href*="/permalink/"]):not([href*="/posts/"]):not([href*="/photos/"])',
-    ];
-
-    for (const strategy of authorStrategies) {
-      try {
-        const authorLocator = contentContainer.locator(strategy).first();
-        if (await authorLocator.isVisible({ timeout: 1000 })) {
-          // Verify it's not a comment author - more robust check
-          const isInComment = await authorLocator.evaluate((el) => {
-            let parent = el.parentElement;
-            while (parent && parent !== document.body) {
-              // Check for comment-specific attributes
-              const ariaLabel =
-                parent.getAttribute("aria-label")?.toLowerCase() || "";
-              const dataTestId =
-                parent.getAttribute("data-testid")?.toLowerCase() || "";
-
-              if (
-                ariaLabel.includes("comment") ||
-                ariaLabel.includes("comentário") ||
-                dataTestId.includes("comment") ||
-                dataTestId.includes("comentário") ||
-                parent.classList.contains("comment") ||
-                parent.querySelector(
-                  '[aria-label*="Comment"], [aria-label*="Comentário"]',
-                )
-              ) {
-                return true;
-              }
-              parent = parent.parentElement;
-            }
-            return false;
-          });
-
-          if (!isInComment) {
-            authorName = await authorLocator.innerText();
-            authorUrl = await authorLocator.getAttribute("href");
-
-            // Additional validation for author name
-            if (
-              authorName &&
-              authorName.trim().length > 0 &&
-              !authorName.includes("·") &&
-              !authorName.match(/^\d+$/) &&
-              !authorName.match(
-                /(Curtir|Like|Comentar|Comment|Share|Compartilhar)/i,
-              ) &&
-              authorName.length < 100
-            ) {
-              // Reasonable name length
-
-              // Check if it looks like a name (has spaces or is a single reasonable word)
-              const isReasonableName =
-                authorName.trim().includes(" ") ||
-                (authorName.trim().length > 2 && authorName.trim().length < 20);
-
-              if (isReasonableName) {
-                console.log(
-                  `[parsePost] Author found with strategy "${strategy}": ${authorName}`,
-                );
-                break;
-              }
-            }
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-
-    // If still no author found, try more aggressive search
-    if (!authorName) {
-      const allLinks = await contentContainer.locator("a[href]").all();
-      for (const link of allLinks) {
-        try {
-          const href = await link.getAttribute("href");
-          let text = await link.innerText();
-
-          // Clean up the text
-          text = text.trim().replace(/\s+/g, " ");
-
-          // Check if it looks like a profile link
-          if (
-            href &&
-            (href.includes("/user/") ||
-              href.includes("/profile.php") ||
-              (href.includes("/groups/") && !href.includes("/permalink/")))
-          ) {
-            // Skip if it's a comment link
-            const isCommentLink = await link.evaluate((el) => {
-              let parent = el.parentElement;
-              while (parent && parent !== document.body) {
-                const ariaLabel =
-                  parent.getAttribute("aria-label")?.toLowerCase() || "";
-                if (
-                  ariaLabel.includes("comment") ||
-                  ariaLabel.includes("comentário")
-                ) {
-                  return true;
-                }
-                parent = parent.parentElement;
-              }
-              return false;
-            });
-
-            if (isCommentLink) continue;
-
-            // Check if text looks like a name (has spaces, reasonable length)
-            if (
-              text &&
-              text.length > 2 &&
-              text.length < 50 &&
-              (text.includes(" ") || text.length > 3) && // Allow single names if they're reasonable
-              !text.includes("@") &&
-              !text.match(
-                /(Curtir|Like|Comentar|Comment|Compartilhar|Share)/i,
-              ) &&
-              !text.match(/^\d+$/) &&
-              !text.includes("·")
-            ) {
-              authorName = text;
-              authorUrl = href;
-              console.log(
-                `[parsePost] Author found with fallback strategy: ${authorName}`,
-              );
-              break;
-            }
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-    }
-
-    // Final fallback: Look for any text that looks like a name near the top of the post
-    if (!authorName) {
-      // Get all text elements in the post
-      const allTextElements = await contentContainer
-        .locator("*")
-        .allInnerTexts();
-      const allText = allTextElements.join("\n");
-
-      // Look for patterns that might be names
-      const namePatterns = [
-        // Pattern for "Posted by NAME on DATE" or similar
-        /Posted by ([\w\s.,-]+)/i,
-        // Pattern for "NAME shared a post" or similar
-        /([\w\s.,-]+) (shared|posted|created) a /i,
-        // Pattern for just a name at the beginning
-        /^([\w\s.,-]+)\n/,
-        // Pattern for group-specific author format
-        /(?:\bby\s+|por\s+|^)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
-      ];
-
-      for (const pattern of namePatterns) {
-        const match = allText.match(pattern);
-        if (match && match[1]) {
-          const potentialName = match[1].trim();
-          if (
-            potentialName.length > 2 &&
-            potentialName.length < 50 &&
-            potentialName.split(" ").length <= 4
-          ) {
-            // Reasonable name length and word count
-            authorName = potentialName;
-            console.log(
-              `[parsePost] Author found with final fallback strategy: ${authorName}`,
-            );
-            break;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(
-      `[parsePost] Post ${postId}: Could not extract author information`,
-      e,
-    );
-  }
-
-  // Step 3: Extract post text with multiple strategies
-  let text: string | null = null;
-  let externalLinks: Array<{ url: string; text: string; domain: string }> = [];
-
-  try {
-    // SKIP "See More" expansion in feed-only mode to avoid opening modais
-    console.log(
-      `[parsePost] Post ${postId}: Skipping "See More" expansion (feed-only mode)`,
-    );
-
-    // Try multiple text extraction strategies with quality filtering
-    const textSelectors = [
-      // Facebook's newer data attributes (most reliable)
-      '[data-ad-comet-preview="message"] > div > div',
-      '[data-ad-preview="message"] > div > div',
-      '[data-testid="post_message"]',
-
-      // Common text container patterns
-      'div[dir="auto"][style*="text-align"]',
-      'span[dir="auto"]',
-      'div[dir="auto"]',
-
-      // More specific patterns for different post types
-      'div[data-testid="post_message"] div[style*="line-height"]',
-      "div[data-uniqueid] > div > div > div > div > span > span",
-
-      // Group-specific patterns
-      'div[data-pagelet="FeedUnit"] [role="article"] > div > div > div > div > div > div > div > div > span > span',
-
-      // Fallback strategies
-      'div[id^=":"] > div > div > div > div > div > div > span > span',
-      'div[role="article"] > div > div > div > div > div > div > div > span > span',
-    ];
-
-    // Function to check if text is meaningful (not random encoded strings)
-    const isValidText = (content: string): boolean => {
-      if (!content || content.length < 5) return false;
-
-      const trimmed = content.trim();
-
-      // Filter out common Facebook UI elements
-      const uiPatterns = [
-        /^Ver tradução$/,
-        /^See translation$/,
-        /^\d+\s*(min|hora|dia|day|hr)s?\s*(ago|atrás)?$/i,
-        /^(Curtir|Like|Comentar|Comment|Compartilhar|Share)$/i,
-        /^[a-zA-Z0-9]+\.(com|net|org|br)$/, // Just domain names without protocol
-        /^www\.[a-zA-Z0-9]+\.(com|net|org|br)$/, // www domains
-        /^https?:\/\/[a-zA-Z0-9]+\.(com|net|org|br)/, // Full URLs
-        /^[a-zA-Z0-9]{7}\.(com|net|org)$/, // Facebook tracking URLs
-        /^[a-zA-Z0-9]{8,12}\.(com|net|org)$/, // More tracking URLs
-        /^[a-zA-Z0-9]{40,}$/, // Very long random strings
-        /^[a-zA-Z0-9]{20,}$/, // Medium random strings
-        /^Mostrar mais$/, // "Show more" text
-        /^Show more$/,
-      ];
-
-      // Check if content matches any UI pattern
-      for (const pattern of uiPatterns) {
-        if (pattern.test(trimmed)) {
-          return false;
-        }
-      }
-
-      // Check for reasonable word/space ratio
-      const words = trimmed.split(/\s+/);
-      const totalChars = trimmed.length;
-      const wordCount = words.length;
-
-      // If it's all one "word" and longer than 20 chars, it's probably encoded
-      if (wordCount === 1 && totalChars > 20) {
-        // Unless it contains common readable patterns
-        const readablePatterns = [
-          /[.!?]/, // Has punctuation
-          /[aeiou]{2,}/i, // Has vowel clusters
-          /\b(the|and|or|but|with|for|at|by|from|to|of|in|on)\b/i, // Common English words
-        ];
-
-        const hasReadablePattern = readablePatterns.some((pattern) =>
-          pattern.test(trimmed),
-        );
-        if (!hasReadablePattern) {
-          return false;
-        }
-      }
-
-      // Check for reasonable character distribution
-      const vowelCount = (trimmed.match(/[aeiouAEIOU]/g) || []).length;
-      const vowelRatio = vowelCount / totalChars;
-
-      // Real text should have at least 15% vowels
-      if (vowelRatio < 0.15 && totalChars > 15) {
-        return false;
-      }
-
-      // Additional check for consecutive identical characters (spam-like)
-      if (/(.)\1{4,}/.test(trimmed)) {
-        return false;
-      }
-
-      // Check if it's just emojis or special characters
-      if (/^[^\p{L}\p{N}]+$/u.test(trimmed)) {
-        return false;
-      }
-
-      return true;
-    };
-
-    let maxLength = 0;
-    for (const selector of textSelectors) {
-      try {
-        const textElements = await contentContainer.locator(selector).all();
-
-        for (const textEl of textElements) {
-          try {
-            const content = await textEl.innerText({ timeout: 1500 });
-            if (content && content.trim().length > 10 && isValidText(content)) {
-              if (content.trim().length > maxLength) {
-                text = content.trim();
-                maxLength = content.trim().length;
-                console.log(
-                  `[parsePost] Post ${postId}: Valid text found via selector "${selector}": "${content.substring(0, 100)}..."`,
-                );
-              }
-            } else if (content && content.trim().length > 10) {
-              console.log(
-                `[parsePost] Post ${postId}: Rejected text (invalid): "${content.substring(0, 50)}..." via selector "${selector}"`,
-              );
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-
-    // Extract external links from the entire content container
-    try {
-      const linkLocators = await contentContainer.locator("a[href]").all();
-      for (const linkLoc of linkLocators) {
-        try {
-          const href = await linkLoc.getAttribute("href");
-          const linkText = await linkLoc.innerText().catch(() => "");
-
-          if (href) {
-            // Special case: Facebook short links that might be external
-            if (href.includes("l.facebook.com/l.php?u=")) {
-              try {
-                const urlParams = new URLSearchParams(href.split("?")[1]);
-                const externalUrl = urlParams.get("u");
-                if (externalUrl) {
-                  try {
-                    const decodedUrl = decodeURIComponent(externalUrl);
-                    const urlObj = new URL(decodedUrl);
-                    externalLinks.push({
-                      url: decodedUrl,
-                      text: linkText.trim() || urlObj.hostname,
-                      domain: urlObj.hostname,
-                    });
-                    continue;
-                  } catch (e) {
-                    // If URL parsing fails, still include the decoded URL
-                    externalLinks.push({
-                      url: decodedUrl,
-                      text: linkText.trim() || decodedUrl,
-                      domain: "facebook-redirect",
-                    });
-                    continue;
-                  }
-                }
-              } catch (e) {
-                // Continue to normal processing
-              }
-            }
-
-            // Filter out Facebook internal links
-            const isFacebookLink =
-              href.includes("facebook.com") ||
-              href.includes("fb.com") ||
-              href.includes("fb.watch") ||
-              href.includes("/groups/") ||
-              href.includes("/posts/") ||
-              href.includes("/permalink/") ||
-              href.includes("/photo/") ||
-              href.includes("/photos/");
-
-            // Include external links
-            if (!isFacebookLink) {
-              try {
-                const url = new URL(
-                  href.startsWith("http") ? href : `https://${href}`,
-                );
-                externalLinks.push({
-                  url: url.href,
-                  text: linkText.trim() || url.hostname,
-                  domain: url.hostname,
-                });
-              } catch (e) {
-                // If URL parsing fails, include as is if it looks like a URL
-                if (
-                  href.startsWith("http") ||
-                  href.includes(".com") ||
-                  href.includes(".net") ||
-                  href.includes(".org")
-                ) {
-                  externalLinks.push({
-                    url: href,
-                    text: linkText.trim() || href,
-                    domain: "unknown",
-                  });
-                }
-              }
-            }
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-
-      // Also search for URLs in the text content itself
-      if (text) {
-        const urlRegex = /https?:\/\/[^\s<>"'(){}[\]]+/g;
-        const textUrls = text.match(urlRegex) || [];
-        for (const url of textUrls) {
-          try {
-            const urlObj = new URL(url);
-            if (
-              !urlObj.hostname.includes("facebook.com") &&
-              !urlObj.hostname.includes("fb.com")
-            ) {
-              // Check if this URL is already in externalLinks
-              const alreadyAdded = externalLinks.some(
-                (link) =>
-                  link.url.includes(urlObj.hostname) ||
-                  urlObj.hostname.includes(link.domain),
-              );
-
-              if (!alreadyAdded) {
-                externalLinks.push({
-                  url: url,
-                  text: urlObj.hostname,
-                  domain: urlObj.hostname,
-                });
-              }
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Link extraction error`, e);
-    }
-
-    // Fallback if no text found
-    if (!text) {
-      const allText = await contentContainer.innerText({ timeout: 2000 });
-      if (allText && allText.trim().length > 50) {
-        // Filter out common Facebook UI elements
-        const lines = allText.split("\n").filter((line) => {
-          const trimmed = line.trim();
-          return (
-            trimmed.length > 10 &&
-            !trimmed.match(
-              /^\d+\s*(min|hora|dia|comentário|curtir|compartilhar)/i,
-            ) &&
-            !trimmed.includes("·") &&
-            !trimmed.match(/^\d+$/) &&
-            !trimmed.match(/^[a-zA-Z0-9]{20,}$/) &&
-            !trimmed.match(/^s\d+[a-zA-Z0-9]+\.com/) &&
-            trimmed !== "Ver tradução" &&
-            trimmed !== "See translation" &&
-            trimmed !== "Mostrar mais" &&
-            trimmed !== "Show more"
-          );
-        });
-
-        // Additional filtering for meaningful content
-        const meaningfulLines = lines.filter((line) => {
-          const words = line.trim().split(/\s+/);
-          const totalChars = line.trim().length;
-          return words.length > 1 || (words.length === 1 && totalChars < 30);
-        });
-
-        if (meaningfulLines.length > 0) {
-          text = meaningfulLines.join(" ").trim();
-          console.log(
-            `[parsePost] Post ${postId}: FALLBACK TEXT: "${text.substring(0, 100)}..."`,
-          );
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(
-      `[parsePost] Post ${postId}: Could not extract text content`,
-      e,
-    );
-  }
-
-  // Step 4: Extract media with multiple strategies
-  let imageUrls: string[] = [];
-  let videoUrls: string[] = [];
-
-  try {
-    // Images: Multiple strategies for finding images
-    const imageStrategies = [
-      // Strategy 1: Standard photo links (most reliable)
-      'a[href*="/photo/"] img, a[href*="/photos/"] img',
-      // Strategy 2: Data-testid patterns
-      'img[data-imgperflogname="profileMediaImage"]',
-      // Strategy 3: Common image containers
-      'div[role="button"][aria-label*="Imagem"] img, div[role="button"][aria-label*="Image"] img',
-      // Strategy 4: Carousel images
-      'div[aria-label="Carrossel"] img, div[aria-label="Carousel"] img, div[aria-label="Slide"] img',
-      // Strategy 5: Direct image elements
-      'img[src*="scontent"], img[src*="fbcdn"]',
-      // Strategy 6: Group post specific patterns
-      'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/photo/"] img',
-    ];
-
-    for (const strategy of imageStrategies) {
-      try {
-        const imgLocators = await contentContainer.locator(strategy).all();
-        for (const imgLoc of imgLocators) {
-          try {
-            const src = await imgLoc.getAttribute("src");
-            if (
-              src &&
-              !src.includes("emoji") &&
-              !src.includes("static") &&
-              (src.includes("scontent") || src.includes("fbcdn")) &&
-              !src.includes("blank.gif")
-            ) {
-              // Avoid duplicates
-              if (!imageUrls.includes(src)) {
-                imageUrls.push(src);
-              }
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-
-    // Videos: Multiple strategies for finding videos
-    const videoStrategies = [
-      // Strategy 1: Direct video elements
-      "video[src]",
-      // Strategy 2: Video containers
-      'div[data-sigil="inlineVideo"]',
-      // Strategy 3: Video links
-      'a[href*="/watch/"]',
-      // Strategy 4: Group post specific patterns
-      'div[data-pagelet="FeedUnit"] [role="article"] a[href*="/watch/"]',
-      // Strategy 5: Embedded video patterns
-      'div[data-testid="video-post"]',
-    ];
-
-    for (const strategy of videoStrategies) {
-      try {
-        const videoLocators = await contentContainer.locator(strategy).all();
-        for (const videoLoc of videoLocators) {
-          try {
-            let src = await videoLoc.getAttribute("src");
-            if (!src) {
-              // Try to get video URL from data-src or other attributes
-              src =
-                (await videoLoc.getAttribute("data-src")) ||
-                (await videoLoc.getAttribute("data-video-src")) ||
-                (await videoLoc.getAttribute("href"));
-            }
-
-            if (src && !videoUrls.includes(src)) {
-              videoUrls.push(src);
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-
-    // If no videos found, check for video metadata
-    if (videoUrls.length === 0) {
-      const videoMetadata = await contentContainer
-        .locator('meta[property="og:video"]')
-        .all();
-      for (const meta of videoMetadata) {
-        try {
-          const videoUrl = await meta.getAttribute("content");
-          if (videoUrl && !videoUrls.includes(videoUrl)) {
-            videoUrls.push(videoUrl);
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Could not extract media`, e);
-  }
-
-  // Step 5: Extract timestamp and permalink with robust strategies
-  let timeText: string | null = null;
-  let timeISO: string | null = null;
-  let permalink: string | null = null;
-
-  // NOVA IMPLEMENTAÇÃO - Extração melhorada de permalink e timestamp
-  console.log(
-    `[parsePost] Post ${postId}: Iniciando extração melhorada de permalink`,
-  );
-
-  // Variável para armazenar o ID real extraído
-  let extractedPostId: string | null = null;
-
-  // Função auxiliar para extrair ID do post de uma URL
-  function extractPostIdFromUrl(url: string): string | null {
-    if (!url) return null;
-
-    const patterns = [
-      /\/posts\/(\d+)/,
-      /\/permalink\/(\d+)/,
-      /story_fbid=(\d+)/,
-      /\/groups\/\d+\/posts\/(\d+)/,
-      /\/groups\/\d+\/permalink\/(\d+)/,
-    ];
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) {
-        const id = match[1];
-        // Validar que é um ID real (pelo menos 6 dígitos)
-        if (id.length >= 6 && /^\d+$/.test(id)) {
-          return id;
-        }
-      }
-    }
-    return null;
-  }
-
-  // Função aprimorada para verificar se é um link de comentário
-  function isCommentLink(href: string): boolean {
-    return (
-      href.includes("comment_id=") ||
-      href.includes("reply_comment_id=") ||
-      href.includes("/comment/") ||
-      (href.includes("__cft__") && href.includes("comment")) ||
-      href.match(/comment.*reply/i) !== null ||
-      href.includes("comment_tracking=") ||
-      href.includes("notif_t=comment")
-    );
-  }
-
-  // Função auxiliar para construir permalink baseado no aria-posinset
-  function constructPermalinkFromPosinset(
-    posinsetValue: string,
-    currentUrl: string,
-  ): string | null {
-    if (!posinsetValue || posinsetValue === "unknown") return null;
-
-    const groupIdMatch = currentUrl.match(/\/groups\/(\d+)/);
-    if (groupIdMatch && groupIdMatch[1]) {
-      const groupId = groupIdMatch[1];
-      return `https://www.facebook.com/groups/${groupId}/posts/${posinsetValue}`;
-    }
-
-    return null;
-  }
-
-  // ESTRATÉGIA 1: Buscar links diretos de posts (mais específica e ampla)
-  try {
-    console.log(`[parsePost] Post ${postId}: Estratégia 1 - Links diretos`);
-
-    // Seletores diretos para permalink - ordem de prioridade (mais específicos primeiro)
-    const directLinkSelectors = [
-      // PRIORIDADE ALTA: Links de foto que contêm o ID global via set=gm.{ID}
-      'a[href*="/photo/"][href*="set=gm."]',
-      'a[href*="/photos/"][href*="set=gm."]',
-      
-      // Seletores baseados na classe específica identificada no HTML
-      'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.xkrqix3.x1sur9pj.xi81zsa.x1s688f[href*="set=gm."]',
-      'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.xkrqix3.x1sur9pj.xi81zsa.x1s688f[href*="/posts/"]',
-      'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.xkrqix3.x1sur9pj.xi81zsa.x1s688f[href*="/permalink/"]',
-      
-      // Seletores específicos para posts em grupos
-      'a[href*="/groups/"][href*="/posts/"]',
-      'a[href*="/groups/"][href*="/permalink/"]',
-      'a[href*="/groups/"][href*="story_fbid"]',
-      
-      // Seletores genéricos (fallback)
-      'a[href*="/posts/"][role="link"]',
-      'a[href*="/permalink/"][role="link"]',
-      'a[href*="story_fbid"]',
-      'a[data-lynx-mode="async"][href*="/posts/"]',
-      'a[data-lynx-mode="async"][href*="/permalink/"]',
-    ];
-
-    // Tentar cada seletor até encontrar um link válido (ordem de prioridade)
-    for (const selector of directLinkSelectors) {
-      try {
-        const linkElements = await contentContainer.locator(selector).all();
-        console.log(
-          `🔍 Testando seletor: ${selector} - ${linkElements.length} elementos encontrados`,
-        );
-
-        for (const linkElement of linkElements) {
-          const href = await linkElement.getAttribute("href");
-
-          if (href && !isCommentLink(href)) {
-            console.log(`✅ Permalink candidato encontrado com seletor: ${selector}`);
-            console.log(`   URL: ${href}`);
-
-            const fullUrl = href.startsWith("http")
-              ? href
-              : `https://www.facebook.com${href}`;
-            const extractedId = extractPostId(fullUrl);
-
-            // Validação rigorosa: ID deve ser global (>=10 dígitos) e diferente do aria-posinset
-            if (
-              extractedId &&
-              extractedId.length >= 10 &&
-              extractedId !== postId &&
-              /^\d+$/.test(extractedId)
-            ) {
-              console.log(`✅ ID GLOBAL extraído com sucesso: ${extractedId}`);
-              console.log(`   Diferente do aria-posinset (${postId}) - ID válido confirmado`);
-              console.log(`   Seletor utilizado: ${selector}`);
-              console.log(`   URL completa: ${fullUrl}`);
-
-              permalink = fullUrl;
-              extractedPostId = extractedId; // Armazenar o ID real
-
-              // Tentar extrair timestamp do mesmo elemento
-              try {
-                const linkText = await linkElement.innerText().catch(() => "");
-                const titleAttr = await linkElement
-                  .getAttribute("title")
-                  .catch(() => "");
-                const ariaLabel = await linkElement
-                  .getAttribute("aria-label")
-                  .catch(() => "");
-
-                // Priorizar aria-label para timestamps (como "1 d")
-                if (ariaLabel && ariaLabel.trim().length > 0 && ariaLabel.trim().length < 20) {
-                  timeText = ariaLabel.trim().replace(/&nbsp;/g, ' ');
-                  timeISO = parseTimestamp(timeText);
-                } else if (
-                  linkText &&
-                  linkText.trim().length > 0 &&
-                  linkText.trim().length < 50
-                ) {
-                  timeText = linkText.trim();
-                  timeISO = parseTimestamp(timeText);
-                } else if (titleAttr && titleAttr.trim().length > 0) {
-                  timeText = titleAttr.trim();
-                  timeISO = parseTimestamp(timeText);
-                }
-              } catch (e) {
-                // Continuar mesmo sem timestamp
-              }
-
-              console.log(
-                `[parsePost] Post ${postId}: ✅ PERMALINK GLOBAL encontrado via Estratégia 1: ${permalink} (ID real: ${extractedPostId})`,
-              );
-              break;
-            } else {
-              console.log(`⚠️ ID rejeitado: ${extractedId} - não atende critérios para ID global`);
-              if (extractedId === postId) {
-                console.log(`   Motivo: É igual ao aria-posinset (ID local)`);
-              }
-              if (extractedId && extractedId.length < 10) {
-                console.log(`   Motivo: Muito curto para ser ID global (${extractedId.length} dígitos)`);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.log(`❌ Erro ao testar seletor ${selector}:`, error);
-        continue;
-      }
-      if (permalink) break;
-    }
-  } catch (e) {
-    console.warn(`[parsePost] Post ${postId}: Estratégia 1 falhou`, e);
-  }
-
-  // ESTRATÉGIA 2: Buscar elementos de timestamp que contêm permalink (expandida)
-  if (!permalink) {
-    try {
-      console.log(
-        `[parsePost] Post ${postId}: Estratégia 2 - Elementos de timestamp`,
-      );
-
-      const timestampSelectors = [
-        // Priorizar seletores mais específicos para timestamps
-        'span[data-testid="story-subtitle"] a',
-        'div[data-ad-rendering-role="profile_name"] ~ div a',
-        'div[role="heading"] ~ div a[href*="/posts/"]',
-        'div[role="heading"] ~ div a[href*="/permalink/"]',
-        "time[datetime] a",
-        "abbr[title] a",
-        'span[role="presentation"] a',
-        // Adicionar mais seletores específicos
-        'a[aria-label]:not([aria-label*="comment"]):not([aria-label*="comentário"])[href*="/posts/"]',
-        'a[aria-label]:not([aria-label*="comment"]):not([aria-label*="comentário"])[href*="/permalink/"]',
-        // Seletores para posts em grupos específicos
-        'div[aria-labelledby] a[href*="/posts/"]',
-        'div[aria-labelledby] a[href*="/permalink/"]',
-      ];
-
-      for (const selector of timestampSelectors) {
-        try {
-          const timestampElements = await contentContainer
-            .locator(selector)
-            .all();
-
-          for (const timestampEl of timestampElements) {
-            const href = await timestampEl.getAttribute("href");
-            if (
-              href &&
-              (href.includes("/posts/") || href.includes("/permalink/"))
-            ) {
-              // Verificar se não é comentário
-              const isCommentLinkEl = await timestampEl.evaluate((el) => {
-                let parent = el.parentElement;
-                let depth = 0;
-                while (parent && parent !== document.body && depth < 8) {
-                  const ariaLabel =
-                    parent.getAttribute("aria-label")?.toLowerCase() || "";
-                  if (
-                    ariaLabel.includes("comment") ||
-                    ariaLabel.includes("comentário")
-                  ) {
-                    return true;
-                  }
-                  parent = parent.parentElement;
-                  depth++;
-                }
-                return false;
-              });
-
-              if (!isCommentLinkEl && !isCommentLink(href)) {
-                const extractedId = extractPostId(href);
-
-                // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
-                if (
-                  extractedId &&
-                  extractedId !== postId &&
-                  extractedId.length >= 6 &&
-                  /^\d+$/.test(extractedId)
-                ) {
-                  permalink = href.startsWith("http")
-                    ? href
-                    : `https://www.facebook.com${href}`;
-                  extractedPostId = extractedId; // Armazenar o ID real
-
-                  // Extrair timestamp
-                  try {
-                    const timestampText = await timestampEl
-                      .innerText()
-                      .catch(() => "");
-                    const titleAttr = await timestampEl
-                      .getAttribute("title")
-                      .catch(() => "");
-
-                    if (timestampText && timestampText.trim().length > 0) {
-                      timeText = timestampText.trim();
-                      timeISO = parseTimestamp(timeText);
-                    } else if (titleAttr && titleAttr.trim().length > 0) {
-                      timeText = titleAttr.trim();
-                      timeISO = parseTimestamp(timeText);
-                    }
-                  } catch (e) {
-                    // Continuar mesmo sem timestamp
-                  }
-
-                  console.log(
-                    `[parsePost] Post ${postId}: Permalink encontrado via Estratégia 2: ${permalink} (ID real: ${extractedId})`,
-                  );
-                  break;
-                } else {
-                  console.log(
-                    `[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`,
-                  );
-                }
-              }
-            }
-          }
-
-          if (permalink) break;
-        } catch (e) {
-          continue;
-        }
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Estratégia 2 falhou`, e);
-    }
-  }
-
-  // ESTRATÉGIA 2.5: Busca específica por links de foto com set=gm (ID global)
-  if (!permalink) {
-    try {
-      console.log(
-        `[parsePost] Post ${postId}: Estratégia 2.5 - Busca específica por links de foto`,
-      );
-
-      // Buscar especificamente links de foto que contêm set=gm.{ID}
-      const photoLinkSelectors = [
-        'a[href*="/photo/"][href*="set=gm."]',
-        'a[href*="/photos/"][href*="set=gm."]',
-        'a[href*="set=gm."]', // Qualquer link com set=gm
-      ];
-
-      for (const selector of photoLinkSelectors) {
-        const photoLinks = await contentContainer.locator(selector).all();
-        console.log(`🔍 Testando seletor de foto: ${selector} - ${photoLinks.length} elementos`);
-
-        for (const photoLink of photoLinks) {
-          const href = await photoLink.getAttribute("href");
-          if (!href) continue;
-
-          console.log(`📸 Analisando link de foto: ${href}`);
-          const extractedId = extractPostId(href);
-
-          if (
-            extractedId &&
-            extractedId.length >= 10 &&
-            extractedId !== postId &&
-            /^\d+$/.test(extractedId)
-          ) {
-            permalink = href.startsWith("http")
-              ? href
-              : `https://www.facebook.com${href}`;
-            extractedPostId = extractedId;
-
-            console.log(
-              `[parsePost] Post ${postId}: ✅ PERMALINK GLOBAL encontrado via link de foto: ${permalink} (ID real: ${extractedId})`,
-            );
-            break;
-          }
-        }
-
-        if (permalink) break;
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Estratégia 2.5 falhou`, e);
-    }
-  }
-
-  // ESTRATÉGIA 3: Busca mais agressiva por elementos clicáveis com timestamp
-  if (!permalink) {
-    try {
-      console.log(
-        `[parsePost] Post ${postId}: Estratégia 3 - Busca agressiva por timestamps clicáveis`,
-      );
-
-      // Buscar QUALQUER link que contenha posts/ ou permalink/ no container do post
-      const allLinks = await contentContainer.locator("a[href]").all();
-
-      for (const link of allLinks) {
-        try {
-          const href = await link.getAttribute("href");
-          if (!href) continue;
-
-          // Verificar se é um link de post/permalink ou foto com set=gm
-          if (
-            href.includes("/posts/") ||
-            href.includes("/permalink/") ||
-            href.includes("story_fbid=") ||
-            href.includes("set=gm.")
-          ) {
-            // Verificar se não é comentário
-            const isCommentLinkEl = await link.evaluate((el) => {
-              let parent = el.parentElement;
-              let depth = 0;
-              while (parent && parent !== document.body && depth < 10) {
-                const ariaLabel =
-                  parent.getAttribute("aria-label")?.toLowerCase() || "";
-                const dataTestId =
-                  parent.getAttribute("data-testid")?.toLowerCase() || "";
-
-                if (
-                  ariaLabel.includes("comment") ||
-                  ariaLabel.includes("comentário") ||
-                  dataTestId.includes("comment")
-                ) {
-                  return true;
-                }
-                parent = parent.parentElement;
-                depth++;
-              }
-              return false;
-            });
-
-            if (!isCommentLinkEl && !isCommentLink(href)) {
-              const extractedId = extractPostId(href);
-
-              // Validação mais rigorosa: ID deve ter pelo menos 6 dígitos e ser diferente do aria-posinset
-              if (
-                extractedId &&
-                extractedId !== postId &&
-                extractedId.length >= 6 &&
-                /^\d+$/.test(extractedId)
-              ) {
-                permalink = href.startsWith("http")
-                  ? href
-                  : `https://www.facebook.com${href}`;
-                extractedPostId = extractedId; // Armazenar o ID real
-
-                // Tentar extrair timestamp
-                try {
-                  const linkText = await link.innerText().catch(() => "");
-                  const titleAttr = await link
-                    .getAttribute("title")
-                    .catch(() => "");
-
-                  if (
-                    linkText &&
-                    linkText.trim().length > 0 &&
-                    linkText.trim().length < 50
-                  ) {
-                    // Verificar se parece com timestamp
-                    const timestampPattern =
-                      /(\d{1,2}:\d{2}|\d{1,2}h|\d{1,2}\s*min|\d{1,2}\s*dia|hoje|ontem|today|yesterday)/i;
-                    if (timestampPattern.test(linkText)) {
-                      timeText = linkText.trim();
-                      timeISO = parseTimestamp(timeText);
-                    }
-                  } else if (titleAttr && titleAttr.trim().length > 0) {
-                    timeText = titleAttr.trim();
-                    timeISO = parseTimestamp(timeText);
-                  }
-                } catch (e) {
-                  // Continuar mesmo sem timestamp
-                }
-
-                console.log(
-                  `[parsePost] Post ${postId}: Permalink encontrado via Estratégia 3: ${permalink} (ID real: ${extractedId})`,
-                );
-                break;
-              } else {
-                console.log(
-                  `[parsePost] Post ${postId}: ID rejeitado "${extractedId}" (muito curto, muito pequeno ou igual ao aria-posinset)`,
-                );
-              }
-            }
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Estratégia 3 falhou`, e);
-    }
-  }
-
-  // ESTRATÉGIA 4: Busca por timestamp via padrões de texto se ainda não encontrado
-  if (!timeText) {
-    try {
-      console.log(
-        `[parsePost] Post ${postId}: Estratégia 4 - Extração de timestamp via padrões`,
-      );
-
-      const contentText = await contentContainer.innerText().catch(() => "");
-
-      const timestampPatterns = [
-        /\b(\d{1,2}:\d{2}(?:\s*[AP]M)?)\b/i,
-        /\b(hoje|today)\s+(?:às|at)\s+(\d{1,2}:\d{2})/i,
-        /\b(ontem|yesterday)\s+(?:às|at)\s+(\d{1,2}:\d{2})/i,
-        /\b(\d{1,2}h)\b/i,
-        /\b(\d{1,2}\s*min)\b/i,
-        /\b(\d{1,2}\s*dia)\b/i,
-        /\b([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?)\b/,
-        /\b(\d{1,2} de [A-Za-z]+)\b/i,
-      ];
-
-      for (const pattern of timestampPatterns) {
-        const match = contentText.match(pattern);
-        if (match && match[1]) {
-          const candidateTimeText = match[1].trim();
-          const parsedTime = parseTimestamp(candidateTimeText);
-
-          if (parsedTime) {
-            timeText = candidateTimeText;
-            timeISO = parsedTime;
-            console.log(
-              `[parsePost] Post ${postId}: Timestamp encontrado via padrão: "${timeText}"`,
-            );
-            break;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Estratégia 4 falhou`, e);
-    }
-  }
-
-  // ESTRATÉGIA 4: Fallback - usar aria-posinset APENAS se não encontrou nada
-  if (!permalink) {
-    try {
-      console.log(
-        `[parsePost] Post ${postId}: Estratégia 4 FALLBACK - Construção via aria-posinset (não recomendado)`,
-      );
-
-      const posinsetValue = await postLocator.getAttribute("aria-posinset");
-      const currentUrl = await postLocator.page().url();
-
-      if (posinsetValue && posinsetValue !== "unknown") {
-        const constructedPermalink = constructPermalinkFromPosinset(
-          posinsetValue,
-          currentUrl,
-        );
-
-        if (constructedPermalink) {
-          permalink = constructedPermalink;
-          extractedPostId = posinsetValue;
-          console.warn(
-            `[parsePost] Post ${postId}: ATENÇÃO - Usando permalink construído (pode não ser o ID real): ${permalink}`,
-          );
-        }
-      }
-    } catch (e) {
-      console.warn(`[parsePost] Post ${postId}: Estratégia 4 falhou`, e);
-    }
-  }
-
-  // Log final results
-  const isRealId =
-    extractedPostId &&
-    extractedPostId !== postId &&
-    extractedPostId.length >= 6 &&
-    /^\d+$/.test(extractedPostId);
-
-  console.log(
-    `[parsePost] Post ${postId}: Extração concluída - Resultados finais:`,
-    {
-      ariaPosinset: postId,
-      extractedPostId: extractedPostId,
-      permalink: permalink ? "✅" : "❌",
-      timeText: timeText ? "✅" : "❌",
-      timeISO: timeISO ? "✅" : "❌",
-      permalinkUrl: permalink,
-      isRealId: isRealId,
-    },
-  );
-
-  if (!permalink) {
-    console.error(
-      `[parsePost] Post ${postId}: CRITICAL - Nenhum permalink encontrado com nenhuma estratégia!`,
-    );
-  } else if (!isRealId) {
-    console.warn(
-      `[parsePost] Post ${postId}: ⚠️ Permalink não é real (usando aria-posinset): ${permalink}`,
-    );
-  } else {
-    console.log(
-      `[parsePost] Post ${postId}: ✅ Permalink extraído com sucesso: ${permalink} (ID real: ${extractedPostId})`,
-    );
-  }
-
-  const result: PostData = {
-    postId: extractedPostId, // Usar o ID real extraído do href, ou null se não encontrou
-    permalink: permalink, // Usar o permalink encontrado, ou null se não encontrou
-    authorName,
-    authorUrl,
-    timeISO,
-    timeText,
-    text,
-    imageUrls: Array.from(new Set(imageUrls)), // Remove duplicates
-    videoUrls: Array.from(new Set(videoUrls)),
-    externalLinks: Array.from(new Set(externalLinks)),
-  };
-
-  console.log(`[parsePost] Post ${postId} parsing complete:`, {
-    hasAuthor: !!result.authorName,
-    hasText: !!result.text,
-    hasTimestamp: !!result.timeText,
-    hasPermalink: !!result.permalink,
-    mediaCount: result.imageUrls.length + result.videoUrls.length,
-    linksCount: result.externalLinks.length,
-  });
-
-  return result;
-}
-
-// parseModal function removed - feed-only mode
-
 export interface SelectorTestOptions {
   userId: string;
   accountId: string;
@@ -1770,606 +41,468 @@ export interface SelectorTestOptions {
   jsonOutputPath?: string;
 }
 
-// Selector health check with more comprehensive tests
-async function runSelectorHealthCheck(page: Page): Promise<boolean> {
-  console.log("[Health Check] Verificando seletores críticos...");
 
-  const criticalSelectors = [
-    {
-      name: "aria-posinset anchor",
-      selector: "div[aria-posinset]",
-      required: true,
-    },
-    { name: "feed container", selector: 'div[role="feed"]', required: true },
-    {
-      name: "article elements",
-      selector: 'div[role="article"]',
-      required: true,
-    },
-    {
-      name: "author containers",
-      selector:
-        'div[data-ad-rendering-role="profile_name"], h2, h3, h4, span[data-testid="story-subtitle"], div[role="heading"]',
-      required: true, // Now required as it's critical for our operation
-    },
-    {
-      name: "text containers",
-      selector:
-        'div[data-ad-preview="message"], [data-testid="post_message"], div[data-ad-comet-preview="message"]',
-      required: true, // Now required
-    },
-    {
-      name: "timestamp elements",
-      selector:
-        'a[href*="/posts/"], a[href*="/permalink/"], abbr[title], time[datetime], span[data-testid="story-subtitle"]',
-      required: true, // Now required
-    },
-    {
-      name: "image containers",
-      selector:
-        'a[href*="/photo/"] img, img[src*="scontent"], div[role="button"][aria-label*="Image"]',
-      required: false,
-    },
-    {
-      name: "video containers",
-      selector: 'video[src], div[data-sigil="inlineVideo"], a[href*="/watch/"]',
-      required: false,
-    },
-    {
-      name: "see more buttons",
-      selector:
-        'div[role="button"]:has-text("See More"), div[role="button"]:has-text("Ver mais")',
-      required: false,
-    },
-    {
-      name: "group post structure",
-      selector: 'div[data-pagelet="FeedUnit"] [role="article"]',
-      required: true, // Now required for group processing
-    },
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+/**
+ * Extrai um ID de post válido de uma URL do Facebook.
+ * Prioriza IDs de grupos e IDs globais de post.
+ * @param href A URL a ser analisada.
+ * @returns O ID do post ou null se não for encontrado.
+ */
+function extractPostId(href: string | null): string | null {
+  if (!href) return null;
+
+  const cleanHref = href.split("?comment_id=")[0].split("&comment_id=")[0];
+
+  const patterns = [
+    /set=gm\.(\d{10,})/,
+    /\/groups\/\d+\/posts\/(\d{10,})/,
+    /\/groups\/\d+\/permalink\/(\d{10,})/,
+    /\/posts\/(\d{10,})/,
+    /\/permalink\/(\d{10,})/,
+    /story_fbid=(\d{10,})/,
+    /\/photo\/[^\/]*\/\?.*story_fbid=(\d{10,})/,
+    /\/photo.*set=gm\.(\d{10,})/,
   ];
 
-  let healthScore = 0;
-  const results = [];
-
-  for (const test of criticalSelectors) {
-    try {
-      const elements = await page.locator(test.selector).count();
-      const success = elements > 0;
-
-      if (success) healthScore++;
-
-      results.push({
-        selector: test.name,
-        found: elements,
-        status: success ? "✅" : "❌",
-        required: test.required,
-      });
-
-      console.log(
-        `[Health Check] ${test.name}: ${test.status} (${elements} elementos)`,
-      );
-
-      if (test.required && !success) {
-        console.error(
-          `[Health Check] CRÍTICO: Seletor obrigatório "${test.name}" falhou!`,
-        );
-      }
-    } catch (error) {
-      results.push({
-        selector: test.name,
-        found: 0,
-        status: "❌",
-        required: test.required,
-        error: (error as Error).message,
-      });
-
-      console.error(
-        `[Health Check] Erro ao testar "${test.name}":`,
-        (error as Error).message,
-      );
+  for (const pattern of patterns) {
+    const match = cleanHref.match(pattern);
+    if (match && match[1]) {
+      return match[1];
     }
   }
 
-  const healthPercent = Math.round(
-    (healthScore / criticalSelectors.length) * 100,
-  );
-  console.log(
-    `[Health Check] Score: ${healthScore}/${criticalSelectors.length} (${healthPercent}%)`,
-  );
+  return null;
+}
 
-  // Check if critical selectors are working
-  const criticalFailures = results.filter(
-    (r) => r.required && r.status === "❌",
-  );
-  if (criticalFailures.length > 0) {
-    console.error(
-      "[Health Check] ❌ FALHA: Seletores críticos não funcionando",
-    );
-    return false;
+/**
+ * Converte timestamps relativos ou absolutos em formato ISO 8601.
+ * @param rawTimestamp O texto do timestamp (ex: "5 min", "Yesterday at 10:00 PM").
+ * @returns A data em formato ISO ou null.
+ */
+function parseTimestamp(rawTimestamp: string): string | null {
+    if (!rawTimestamp) return null;
+
+    try {
+      let normalized = rawTimestamp.trim().replace(/\s+/g, " ").replace(/&nbsp;/g, ' ');
+
+      const relativeMatch = normalized.match(/^(\d+)\s*(h|min|m|s|seg|hora|dia|day|hr)s?\s*(ago|atrás)?$/i);
+      if (relativeMatch) {
+        const value = parseInt(relativeMatch[1]);
+        const unit = relativeMatch[2].toLowerCase();
+        const now = new Date();
+
+        switch (unit) {
+          case "min": case "m": now.setMinutes(now.getMinutes() - value); break;
+          case "h": case "hr": case "hora": now.setHours(now.getHours() - value); break;
+          case "d": case "dia": case "day": now.setDate(now.getDate() - value); break;
+          case "s": case "seg": now.setSeconds(now.getSeconds() - value); break;
+        }
+        return now.toISOString();
+      }
+
+      const date = new Date(normalized);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+
+      return null;
+    } catch (e) {
+      console.warn("[parseTimestamp] Failed to parse:", rawTimestamp);
+      return null;
+    }
+}
+
+
+// =============================================================================
+// CORE AUTOMATION LOGIC
+// =============================================================================
+
+/**
+ * Garante que o usuário está logado e a página do grupo está carregada.
+ */
+async function ensureLoggedIn(page: Page, groupUrl: string) {
+  try {
+    await page.locator('div[role="feed"]').first().waitFor({ state: "visible", timeout: 8000 });
+    console.log(">> Login já ativo e feed visível.");
+    return;
+  } catch {}
+
+  const cookieBtn = page.locator('button:has-text("Allow all cookies"), button:has-text("Aceitar todos")');
+  if (await cookieBtn.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+    await cookieBtn.first().click().catch(() => {});
   }
 
-  if (healthPercent >= 70) {
-    console.log("[Health Check] ✅ Seletores saudáveis");
-    return true;
-  } else {
-    console.warn(
-      "[Health Check] ⚠️ Seletores degradados - considere atualização",
-    );
-    return false;
+  const loginHints = page.locator('form[action*="login"], input[name="email"]');
+  if (await loginHints.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+    console.log(">> Faça o login para continuar. O script vai esperar...");
+    await page.waitForURL((url) => url.href.startsWith(groupUrl), { timeout: 180000 });
+    await page.locator('div[role="feed"]').first().waitFor({ state: "visible", timeout: 30000 });
+    console.log(">> Login completo e feed carregado.");
   }
 }
 
-// CLI Interface
+/**
+ * Detecta e fecha modais que possam aparecer na tela.
+ */
+async function detectAndCloseModal(page: Page): Promise<boolean> {
+  const modalSelector = 'div[role="dialog"], div[aria-modal="true"]';
+  const modal = page.locator(modalSelector).first();
+
+  if (await modal.isVisible({ timeout: 500 })) {
+    console.log("[detectAndCloseModal] Modal detectado.");
+    await page.keyboard.press("Escape").catch(e => console.warn("Falha ao pressionar ESC", e));
+    await sleep(1000);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Função principal que extrai todos os dados de um único post.
+ * @param postLocator O Locator do Playwright para o contêiner do post.
+ * @returns Um objeto PostData com todas as informações extraídas.
+ */
+async function parsePost(postLocator: Locator): Promise<PostData> {
+    const localPostId = (await postLocator.getAttribute("aria-posinset")) || "unknown";
+    
+    const data: PostData = {
+      postId: null, permalink: null, authorName: null, authorUrl: null,
+      timeISO: null, timeText: null, text: null, imageUrls: [],
+      videoUrls: [], externalLinks: []
+    };
+
+    console.log(`\n--- POST #${localPostId} ---`);
+
+    // 1. Extrair Permalink e Timestamp
+    try {
+      const parentContainerSelector = 'div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x6s0dn4.x17zd0t2.x78zum5.x1q0g3np.x1a02dak';
+      const timestampContainer = postLocator.locator(parentContainerSelector).first();
+
+      if (await timestampContainer.isVisible({ timeout: 500 })) {
+        await timestampContainer.hover({ timeout: 1000 }).catch(() => {});
+        await sleep(500);
+        
+        const linkElements = await timestampContainer.locator('a[href]').all();
+
+        for (const linkElement of linkElements) {
+          await linkElement.hover({ timeout: 500 }).catch(() => {});
+          await sleep(200);
+          
+          const href = await linkElement.getAttribute("href");
+
+          if (href && !href.includes("comment_id")) {
+            const fullUrl = href.startsWith("http") ? href : `https://www.facebook.com${href}`;
+            const realPostId = extractPostId(fullUrl);
+
+            if (realPostId) {
+              data.permalink = fullUrl;
+              data.postId = realPostId;
+              
+              // Extrair timestamp de forma mais segura
+              const ariaLabel = await linkElement.getAttribute("aria-label").catch(() => null);
+              const innerText = await linkElement.innerText().catch(() => null);
+              
+              // Preferir aria-label, mas validar se não está corrompido
+              let timestampText = ariaLabel || innerText || '';
+              timestampText = timestampText.trim().replace(/&nbsp;/g, ' ');
+              
+              // Verificar se o texto parece válido (não contém muitos caracteres especiais)
+              const isValidTimestamp = timestampText.length > 0 && timestampText.length < 100 && 
+                                     !/[^\w\s\-\:\.\/àáâãéêíóôõúç]/gi.test(timestampText);
+              
+              if (isValidTimestamp) {
+                data.timeText = timestampText;
+                data.timeISO = parseTimestamp(data.timeText);
+              }
+              
+              break; 
+            }
+          }
+        }
+      }
+    } catch (e) { 
+      console.log(`[ERRO] Timestamp: ${(e as Error).message}`);
+    }
+
+    // Fallback se o método principal falhar
+    if (!data.permalink) {
+      try {
+          const timestampSelector = 'a[href*="/posts/"][aria-label], a[href*="/permalink/"][aria-label]';
+          const linkElements = await postLocator.locator(timestampSelector).all();
+          
+          for (const linkElement of linkElements) {
+              await linkElement.hover({ timeout: 500 }).catch(() => {});
+              await sleep(300);
+              
+              const href = await linkElement.getAttribute("href");
+              if (href && !href.includes("comment_id")) {
+                  const fullUrl = href.startsWith("http") ? href : `https://www.facebook.com${href}`;
+                  const realPostId = extractPostId(fullUrl);
+                  if (realPostId) {
+                      data.permalink = fullUrl;
+                      data.postId = realPostId;
+                      
+                      const ariaLabel = await linkElement.getAttribute("aria-label").catch(() => '');
+                      if (ariaLabel && ariaLabel.length < 100) {
+                        data.timeText = ariaLabel.trim().replace(/&nbsp;/g, ' ');
+                        data.timeISO = parseTimestamp(data.timeText);
+                      }
+                      break;
+                  }
+              }
+          }
+      } catch (e) {
+        console.log(`[ERRO] Fallback: ${(e as Error).message}`);
+      }
+    }
+
+    // 2. Extrair Autor
+    try {
+      const authorSelector = 'h2 a, h3 a, [data-ad-rendering-role="profile_name"] a';
+      const authorLocator = postLocator.locator(authorSelector).first();
+      if (await authorLocator.isVisible({ timeout: 500 })) {
+        data.authorName = (await authorLocator.innerText()).trim();
+        data.authorUrl = await authorLocator.getAttribute("href");
+      }
+    } catch (e) { 
+      console.log(`[ERRO] Autor: ${(e as Error).message}`);
+    }
+
+    // 3. Extrair Texto do Post
+    try {
+      const textSelector = '[data-ad-preview="message"], [data-testid="post_message"]';
+      const textLocator = postLocator.locator(textSelector).first();
+      if (await textLocator.isVisible({ timeout: 500 })) {
+          data.text = (await textLocator.innerText()).trim();
+      }
+    } catch (e) { 
+      console.log(`[ERRO] Texto: ${(e as Error).message}`);
+    }
+
+    // 4. Extrair Mídia (Imagens)
+    try {
+      const imgLocators = await postLocator.locator('a[href*="/photo/"] img, img[src*="scontent"]').all();
+      
+      for (const img of imgLocators) {
+        const src = await img.getAttribute("src");
+        if (src && !src.includes("emoji") && !src.includes("static") && !data.imageUrls.includes(src)) {
+          data.imageUrls.push(src);
+        }
+      }
+    } catch (e) { 
+      console.log(`[ERRO] Imagens: ${(e as Error).message}`);
+    }
+
+    // Tentativa final se ainda não temos permalink
+    if (!data.permalink) {
+      try {
+          const allLinks = await postLocator.locator('a[href]').all();
+          
+          for (const link of allLinks) {
+              await link.hover({ timeout: 500 }).catch(() => {});
+              await sleep(200);
+              
+              const href = await link.getAttribute("href");
+              if (href && (href.includes("/posts/") || href.includes("/permalink/")) && !href.includes("comment_id")) {
+                  const fullUrl = href.startsWith("http") ? href : `https://www.facebook.com${href}`;
+                  const realPostId = extractPostId(fullUrl);
+                  if (realPostId) {
+                      data.permalink = fullUrl;
+                      data.postId = realPostId;
+                      break;
+                  }
+              }
+          }
+      } catch (e) { 
+        console.log(`[ERRO] Hover intensivo: ${(e as Error).message}`);
+      }
+    }
+
+    // Fallback final
+    if (!data.permalink) {
+      const currentUrl = postLocator.page().url();
+      const groupIdMatch = currentUrl.match(/\/groups\/(\d+)/);
+      if (groupIdMatch && localPostId !== "unknown") {
+        data.permalink = `https://www.facebook.com/groups/${groupIdMatch[1]}/posts/${localPostId}`;
+        data.postId = localPostId;
+      }
+    }
+
+    // Log simplificado dos resultados
+    console.log(`Post ID: ${data.postId || 'NAO ENCONTRADO'}`);
+    console.log(`Autor: ${data.authorName || 'NAO ENCONTRADO'}`);
+    console.log(`Texto: ${data.text ? `${data.text.length} caracteres` : 'NAO ENCONTRADO'}`);
+    console.log(`Imagens: ${data.imageUrls.length}`);
+    console.log(`Timestamp: ${data.timeText || 'NAO ENCONTRADO'}`);
+    console.log(`Status: ${data.postId ? 'SUCESSO' : 'FALHA'}`);
+    console.log(`--- Fim Post #${localPostId} ---\n`);
+    
+    return data;
+}
+
+/**
+ * Roda uma verificação de saúde nos seletores críticos da página.
+ */
+async function runSelectorHealthCheck(page: Page): Promise<boolean> {
+  console.log("\n--- Verificação de Saúde dos Seletores ---");
+  const criticalSelectors = [
+    { name: "Âncora de Post (aria-posinset)", selector: "div[aria-posinset]", required: true },
+    { name: "Contêiner do Feed", selector: 'div[role="feed"]', required: true },
+    { name: "Elemento de Artigo", selector: 'div[role="article"]', required: true },
+    { name: "Contêiner de Autor", selector: 'h2 a, h3 a', required: true },
+    { name: "Contêiner de Texto", selector: '[data-ad-preview="message"], [data-testid="post_message"]', required: true },
+    { name: "Elemento de Timestamp (Método Novo - Container Pai)", selector: 'div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x6s0dn4.x17zd0t2.x78zum5.x1q0g3np.x1a02dak', required: true },
+    { name: "Elemento de Timestamp (Fallback)", selector: 'a[href*="/posts/"][aria-label]', required: false },
+  ];
+
+  let allGood = true;
+  for (const { name, selector, required } of criticalSelectors) {
+    try {
+      const count = await page.locator(selector).count();
+      const status = count > 0 ? "✅" : "❌";
+      console.log(`[Health Check] ${name}: ${status} (${count} encontrados)`);
+      if (required && count === 0) {
+        allGood = false;
+      }
+    } catch (error) {
+      console.error(`[Health Check] Erro ao testar "${name}":`, (error as Error).message);
+      if (required) allGood = false;
+    }
+  }
+
+  console.log(allGood ? "✅ Saúde dos seletores OK." : "❌ FALHA: Seletores críticos não encontrados.");
+  console.log("-----------------------------------------\n");
+  return allGood;
+}
+
+// =============================================================================
+// MAIN EXECUTION SCRIPT
+// =============================================================================
+
+/**
+ * Função principal que orquestra o processo de scraping.
+ */
+export async function testSelectors(options: SelectorTestOptions) {
+  const {
+    userId, accountId, groupUrl, headless = false, maxPosts = 25,
+    maxScrolls = 240, pauseBetweenPostsMs = [700, 1400], saveToJson = true,
+    jsonOutputPath, webhookUrl
+  } = options;
+
+  console.log(`🚀 Iniciando teste de seletores`);
+  console.log(`   - Grupo: ${groupUrl}`);
+  console.log(`   - Meta: ${maxPosts} posts`);
+
+  const context = await openContextForAccount(userId, accountId, headless);
+  const page = await context.newPage();
+  const results: Array<PostData & { groupUrl: string }> = [];
+  const seen = new Set<string>();
+
+  try {
+    await page.goto(groupUrl, { waitUntil: "domcontentloaded" });
+    await ensureLoggedIn(page, groupUrl);
+    await runSelectorHealthCheck(page);
+
+    if (options.healthCheckOnly) return;
+
+    let scrolls = 0;
+    while (results.length < maxPosts && scrolls < maxScrolls) {
+      await detectAndCloseModal(page);
+
+      const postsOnPage = await page.locator("div[aria-posinset]").all();
+      let newPostsFound = 0;
+
+      for (const postElement of postsOnPage) {
+        if (results.length >= maxPosts) break;
+
+        const posinsetValue = await postElement.getAttribute("aria-posinset");
+        if (!posinsetValue || seen.has(posinsetValue)) continue;
+
+        seen.add(posinsetValue);
+        newPostsFound++;
+
+        try {
+          await postElement.scrollIntoViewIfNeeded();
+          await sleep(300);
+          const data = await parsePost(postElement);
+
+          if (data.postId) { // Apenas adiciona se tiver um ID válido
+            const payload = { ...data, groupUrl };
+            results.push(payload);
+
+            if (webhookUrl) {
+              await processPostWithN8n(payload, webhookUrl).catch(err => 
+                console.warn(`[Webhook] Erro para post ${payload.postId}:`, err.message)
+              );
+            }
+          } else {
+              console.warn(`[testSelectors] Post ${posinsetValue} ignorado por falta de ID real.`);
+          }
+
+          await sleep(rand(...pauseBetweenPostsMs));
+        } catch (error) {
+          console.error(`❌ Erro ao processar post ${posinsetValue}:`, (error as Error).message);
+        }
+      }
+
+      if (newPostsFound === 0) {
+        scrolls++;
+        console.log(`📜 Scroll ${scrolls}/${maxScrolls} - Nenhum post novo, carregando mais...`);
+        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+        await sleep(2000);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Erro geral durante o processamento:", error);
+  } finally {
+    if (saveToJson && results.length > 0) {
+        const outputDir = jsonOutputPath || path.join(process.cwd(), "output");
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const fileName = `facebook_posts_${timestamp}.json`;
+        const filePath = path.join(outputDir, fileName);
+
+        fs.writeFileSync(filePath, JSON.stringify({ meta: { ...options, processed: results.length }, posts: results }, null, 2));
+        console.log(`\n💾 Resultados salvos em: ${filePath}`);
+    }
+    await context.close();
+    console.log("✅ Teste finalizado.");
+  }
+}
+
+// =============================================================================
+// CLI INTERFACE
+// =============================================================================
+
 if (require.main === module) {
   async function main() {
     const { getTestIds } = await import("./helpers/getTestIds");
+    let { userId, accountId } = await getTestIds() || {};
 
-    let userId = process.argv[2];
-    let accountId = process.argv[3];
-    const groupUrl =
-      process.argv[4] ||
-      "https://www.facebook.com/groups/tomorandosozinhoeagoraof    ";
-    const headless = process.argv.includes("--headless");
-    const maxPosts = parseInt(
-      process.argv
-        .find((arg) => arg.startsWith("--max-posts="))
-        ?.split("=")[1] || "25",
-    );
-    const saveToJson = !process.argv.includes("--no-json");
-    const jsonOutputPath = process.argv
-      .find((arg) => arg.startsWith("--json-output="))
-      ?.split("=")[1];
-
-    // Auto discovery
-    if (!userId || !accountId || userId === "auto" || accountId === "auto") {
-      console.log("🔄 Buscando IDs automaticamente...");
-      const testIds = await getTestIds();
-
-      if (!testIds) {
-        console.error("❌ Não foi possível obter IDs de teste");
-        process.exit(1);
-      }
-
-      userId = testIds.userId;
-      accountId = testIds.accountId;
-      console.log(
-        `✅ Usando conta: ${testIds.accountName} (${testIds.status})`,
-      );
-    }
-
-    try {
-      await testSelectors({
-        userId,
-        accountId,
-        groupUrl,
-        headless,
-        maxPosts,
-        saveToJson,
-        jsonOutputPath,
-      });
-      console.log("✅ Teste standalone concluído com sucesso");
-      process.exit(0);
-    } catch (err) {
-      console.error("❌ Erro no teste standalone:", err);
+    if (!userId || !accountId) {
+      console.error("❌ Não foi possível obter IDs de teste. Verifique a configuração.");
       process.exit(1);
     }
+
+    const groupUrl = process.argv[2] || "https://www.facebook.com/groups/940840924057399";
+    const headless = process.argv.includes("--headless");
+
+    // Exemplo de como definir maxPosts. Adicione outras opções conforme necessário.
+    const maxPosts = 50; 
+
+    await testSelectors({ userId, accountId, groupUrl, headless, maxPosts });
   }
 
   main().catch((err) => {
     console.error("💥 Erro fatal:", err);
     process.exit(1);
   });
-}
-
-/**
- * Testa os seletores usando a sessão oficial do projeto
- */
-export async function testSelectors(options: SelectorTestOptions) {
-  const {
-    userId,
-    accountId,
-    groupUrl,
-    webhookUrl = process.env.WEBHOOK_URL,
-    headless = false,
-    maxPosts = 25,
-    maxScrolls = 240,
-    pauseBetweenPostsMs = [700, 1400],
-    saveToJson = true,
-    jsonOutputPath,
-  } = options;
-
-  if (!groupUrl) throw new Error("groupUrl é obrigatória");
-
-  console.log(`[selectorTester] 🚀 Iniciando teste robusto de seletores`);
-  console.log(`[selectorTester] Grupo: ${groupUrl}`);
-  console.log(`[selectorTester] Conta: ${accountId}`);
-  console.log(
-    `[selectorTester] Meta: ${maxPosts} posts, max ${maxScrolls} scrolls`,
-  );
-
-  // Usar o contexto oficial do projeto
-  const context = await openContextForAccount(userId, accountId, headless);
-  const page = await context.newPage();
-
-  // Array para armazenar os resultados - DEFINIDO FORA DO TRY PARA SER ACESSÍVEL MESMO EM CASO DE ERRO
-  const results: Array<PostData & { groupUrl: string }> = [];
-  let processed = 0;
-  const seen = new Set<string>(); // Mover declaração para fora do try para ser acessível no finally
-
-  try {
-    await page.goto(groupUrl, { waitUntil: "domcontentloaded" });
-    await ensureLoggedIn(page, groupUrl);
-
-    // Run health check first (following document recommendations)
-    console.log(`[selectorTester] 🏥 Executando health check dos seletores...`);
-    const healthCheck = await runSelectorHealthCheck(page);
-
-    if (!healthCheck) {
-      console.warn(
-        `[selectorTester] ⚠️ Health check falhou - seletores podem estar desatualizados`,
-      );
-      console.warn(
-        `[selectorTester] Continuando teste, mas resultados podem ser limitados...`,
-      );
-    } else {
-      console.log(
-        `[selectorTester] ✅ Health check passou - seletores funcionando corretamente`,
-      );
-    }
-
-    // If health check only mode, return early
-    if (options.healthCheckOnly) {
-      console.log(`[selectorTester] 🏥 Modo health check apenas - finalizando`);
-      return;
-    }
-
-    let scrolls = 0;
-    let shouldStop = false;
-
-    while (processed < maxPosts && scrolls < maxScrolls && !shouldStop) {
-      // Verificar se estamos na página correta e não em modal
-      const currentUrl = page.url();
-      if (!currentUrl.includes("/groups/")) {
-        console.log(
-          `[selectorTester] ⚠️ Não está na página do grupo. URL atual: ${currentUrl}`,
-        );
-        await page.goto(groupUrl, { waitUntil: "domcontentloaded" });
-        await ensureLoggedIn(page, groupUrl);
-        continue;
-      }
-
-      // Verificar se um modal não está bloqueando a visualização
-      const modalExists = await page
-        .locator('div[role="dialog"], div[aria-modal="true"]')
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (modalExists) {
-        console.log(
-          `[selectorTester] ⚠️ Modal detectado no início do ciclo - fechando`,
-        );
-        await detectAndCloseModal(page);
-        await sleep(1000);
-      }
-
-      // STEP 1: Use aria-posinset as primary anchor (following document strategy)
-      const allPosinsetElements = await page
-        .locator("div[aria-posinset]")
-        .all();
-      console.log(
-        `[selectorTester] Descobertos ${allPosinsetElements.length} elementos com aria-posinset (scroll ${scrolls})`,
-      );
-
-      let processedInThisCycle = 0;
-
-      // Process all visible posts with aria-posinset
-      for (const posinsetElement of allPosinsetElements) {
-        if (processed >= maxPosts) break;
-
-        const posinsetValue =
-          await posinsetElement.getAttribute("aria-posinset");
-        if (!posinsetValue || seen.has(posinsetValue)) {
-          continue; // Skip already processed posts
-        }
-
-        console.log(
-          `[selectorTester] 🎯 Processando post aria-posinset="${posinsetValue}" (${processed + 1}/${maxPosts})`,
-        );
-
-        // Mark as seen immediately to prevent reprocessing
-        seen.add(posinsetValue);
-
-        try {
-          // Check for modal before processing post
-          const modalDetected = await detectAndCloseModal(page);
-          if (modalDetected) {
-            console.log(
-              `[selectorTester] ⚠️ Modal fechado antes de processar post ${posinsetValue}`,
-            );
-            await sleep(1000);
-          }
-
-          // Ensure post is visible
-          await posinsetElement.scrollIntoViewIfNeeded();
-          await sleep(300);
-
-          // Use new robust parsing function directly on the locator (feed-only mode)
-          console.log(
-            `[selectorTester] MODO FEED-ONLY - extraindo dados sem abrir modais`,
-          );
-          const data = await parsePost(posinsetElement);
-          const payload = { ...data, groupUrl };
-
-          // Adicionar ao array de resultados
-          results.push(payload);
-
-          console.log(`[selectorTester] ✅ Post ${posinsetValue} extraído:`, {
-            id: payload.postId,
-            author: payload.authorName,
-            textLength: payload.text?.length || 0,
-            fullText: payload.text || "NO TEXT",
-            images: payload.imageUrls?.length || 0,
-            videos: payload.videoUrls?.length || 0,
-            links: payload.externalLinks?.length || 0,
-            externalLinks:
-              payload.externalLinks?.map(
-                (link) => `${link.domain}: ${link.text}`,
-              ) || [],
-          });
-
-          // Send to webhook if configured
-          if (webhookUrl && payload.postId) {
-            try {
-              console.log(`[selectorTester] Enviando para webhook...`);
-              const n8nResponse = await processPostWithN8n(payload, webhookUrl);
-              console.log(
-                `[selectorTester] Webhook processado - modo feed-only ativo`,
-              );
-            } catch (err) {
-              console.warn(
-                `[selectorTester] Erro no processamento webhook para post ${payload.postId}:`,
-                (err as Error).message,
-              );
-            }
-          }
-
-          processed++;
-          processedInThisCycle++;
-          console.log(
-            `[selectorTester] ✅ Post ${posinsetValue} processado com sucesso! Total: ${processed}`,
-          );
-
-          // Pause between posts
-          await sleep(rand(...pauseBetweenPostsMs));
-        } catch (error) {
-          console.error(
-            `[selectorTester] ❌ Erro ao processar post ${posinsetValue}:`,
-            (error as Error).message,
-          );
-          // Continue with next post instead of stopping
-        }
-      }
-
-      // Check if we should continue
-      if (processed >= maxPosts) {
-        console.log(`[selectorTester] 🎯 Meta de ${maxPosts} posts alcançada!`);
-        break;
-      }
-
-      if (processedInThisCycle === 0) {
-        scrolls++;
-        console.log(
-          `[selectorTester] Scroll ${scrolls}/${maxScrolls} - Nenhum post novo processado, carregando mais...`,
-        );
-
-        // DETECT AND CLOSE MODALS BEFORE SCROLLING
-        const modalDetected = await detectAndCloseModal(page);
-        if (modalDetected) {
-          console.log(
-            `[selectorTester] ⚠️ Modal detectado e fechado - resetando scroll`,
-          );
-          await sleep(2000); // Wait for modal close animation
-          continue; // Try again without incrementing scroll counter
-        }
-
-        // STEP 2: Intelligent scrolling with stall detection
-        const processedNumbers = Array.from(seen)
-          .map((id) => parseInt(id))
-          .filter((n) => !isNaN(n));
-        const maxProcessed = Math.max(...processedNumbers, 0); // Ensure default to 0
-
-        // Detect if we're in a stall (same maxProcessed for many scrolls)
-        const stallThreshold = 10; // Number of scrolls without new posts to trigger stall detection
-        if (scrolls > stallThreshold && maxProcessed > 0) {
-          // Check if we've been stuck on the same post for too long
-          const stallCount = scrolls - maxProcessed;
-
-          if (stallCount > stallThreshold) {
-            console.log(
-              `[selectorTester] 🚨 STALL detectado - travado no post ${maxProcessed} há ${stallCount} scrolls`,
-            );
-
-            // Try aggressive scrolling to break the stall
-            console.log(
-              `[selectorTester] Tentando scroll agressivo para quebrar o stall...`,
-            );
-            await page.evaluate(() => {
-              window.scrollBy(0, window.innerHeight * 2);
-            });
-            await sleep(3000);
-
-            // If still stalled, try clicking somewhere safe to refresh feed
-            try {
-              const feedContainer = page.locator('div[role="feed"]').first();
-              if (await feedContainer.isVisible()) {
-                await feedContainer.click({ position: { x: 10, y: 10 } });
-                console.log(`[selectorTester] Clique no feed para refresh`);
-                await sleep(2000);
-              }
-            } catch (e) {
-              // Ignore click errors
-            }
-
-            continue; // Retry the loop after stall breaking attempt
-          }
-        }
-
-        if (maxProcessed > 0) {
-          // Wait for next sequential post to appear
-          console.log(
-            `[selectorTester] Aguardando post aria-posinset="${maxProcessed + 1}" aparecer...`,
-          );
-
-          // Gentle scroll to load more content
-          await page.evaluate(() =>
-            window.scrollBy(0, window.innerHeight * 0.6),
-          );
-
-          // Wait for new content to load with shorter timeout
-          try {
-            await page
-              .locator(`div[aria-posinset="${maxProcessed + 1}"]`)
-              .waitFor({
-                state: "visible",
-                timeout: 3000, // Reduced timeout
-              });
-            console.log(
-              `[selectorTester] ✅ Próximo post encontrado: aria-posinset="${maxProcessed + 1}"`,
-            );
-          } catch (e) {
-            console.log(
-              `[selectorTester] ⏳ Próximo post não apareceu, continuando...`,
-            );
-            await sleep(1500); // Reduced wait time
-          }
-        } else {
-          // Fallback scroll if no processed posts yet (initial load)
-          await page.evaluate(() =>
-            window.scrollBy(0, window.innerHeight * 0.6),
-          );
-          await sleep(1500);
-        }
-
-        // Check if we've reached the end or max scrolls
-        if (scrolls >= maxScrolls) {
-          console.log(
-            `[selectorTester] 🛑 Limite de scrolls (${maxScrolls}) atingido`,
-          );
-          break;
-        }
-      } else {
-        // If posts were processed, reset scroll count for the next logical batch
-        // This is a heuristic to prevent premature stall detection if many posts appear at once
-        console.log(
-          `[selectorTester] ${processedInThisCycle} posts processados, continuando para o próximo scroll...`,
-        );
-      }
-    }
-
-    console.log(
-      `[selectorTester] ✅ Finalizado. Posts processados: ${processed}, posts únicos encontrados: ${seen.size}`,
-    );
-  } catch (error) {
-    console.error(
-      `[selectorTester] ❌ Erro geral durante o processamento:`,
-      error,
-    );
-  } finally {
-    // SALVAR RESULTADOS SEMPRE NO BLOCO FINALLY
-    if (saveToJson && results.length > 0) {
-      try {
-        const outputDir = jsonOutputPath || path.join(process.cwd(), "output");
-        if (!fs.existsSync(outputDir)) {
-          fs.mkdirSync(outputDir, { recursive: true });
-        }
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const fileName = `facebook_posts_${timestamp}.json`;
-        const filePath = path.join(outputDir, fileName);
-
-        fs.writeFileSync(
-          filePath,
-          JSON.stringify(
-            {
-              meta: {
-                groupUrl,
-                accountId,
-                userId,
-                processed,
-                uniquePosts: seen ? seen.size : results.length,
-                timestamp: new Date().toISOString(),
-                status: "completed",
-              },
-              posts: results,
-            },
-            null,
-            2,
-          ),
-        );
-
-        console.log(`[selectorTester] 💾 Resultados salvos em: ${filePath}`);
-        console.log(
-          `[selectorTester] 📊 Total de posts salvos: ${results.length}`,
-        );
-
-        // Mostrar resumo no console
-        const authors = new Set(
-          results.filter((p) => p.authorName).map((p) => p.authorName),
-        );
-        console.log(
-          `[selectorTester] 👤 Autores únicos encontrados: ${authors.size}`,
-        );
-        console.log(
-          `[selectorTester] 📝 Posts com texto: ${results.filter((p) => p.text).length}`,
-        );
-        console.log(
-          `[selectorTester] 🖼️ Posts com imagens: ${results.filter((p) => p.imageUrls.length > 0).length}`,
-        );
-        console.log(
-          `[selectorTester] ▶️ Posts com vídeos: ${results.filter((p) => p.videoUrls.length > 0).length}`,
-        );
-      } catch (err) {
-        console.error(
-          `[selectorTester] ❌ Erro ao salvar resultados em JSON:`,
-          err,
-        );
-      }
-    } else if (saveToJson && results.length === 0) {
-      console.warn(
-        `[selectorTester] ⚠️ Nenhum post processado para salvar em JSON.`,
-      );
-    }
-
-    // Fechar o contexto mesmo em caso de erro
-    await context.close();
-  }
-}
-
-async function sendToWebhook(
-  data: PostData & { groupUrl: string },
-  webhookUrl: string,
-) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const errorBody = await res.text().catch(() => "N/A");
-      throw new Error(
-        `Webhook respondeu com status ${res.status}. Body: ${errorBody}`,
-      );
-    }
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("Timeout: Webhook não respondeu em 15 segundos.");
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
