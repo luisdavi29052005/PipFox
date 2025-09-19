@@ -22,8 +22,30 @@ export async function processPostWithN8n(
   webhookUrl: string
 ): Promise<N8nResponse> {
   try {
+    // Verificar se é uma URL especial para captura
+    if (webhookUrl === 'capture://dummy') {
+      const { PostCapture } = await import('./postCapture');
+      const capture = PostCapture.getInstance();
+
+      if (capture.isCurrentlyCapturing()) {
+        capture.capturePost(payload);
+        return { shouldComment: false };
+      }
+    }
+
+    // Verificar se é uma URL especial para processamento em tempo real
+    if (webhookUrl === 'realtime://process') {
+      const { RealTimePostProcessor } = await import('./realTimePostProcessor');
+      const processor = RealTimePostProcessor.getInstance();
+
+      if (processor.isProcessing()) {
+        await processor.processPostInRealTime(payload);
+        return { shouldComment: false };
+      }
+    }
+
     console.log('[n8nIntegration] Enviando post para análise...')
-    
+
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -40,9 +62,9 @@ export async function processPostWithN8n(
 
     const result = await response.json() as N8nResponse
     console.log('[n8nIntegration] Resposta recebida:', result)
-    
+
     return result
-    
+
   } catch (error) {
     console.error('[n8nIntegration] Erro ao processar com n8n:', error)
     return {
