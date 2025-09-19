@@ -75,7 +75,7 @@ class RealTimeCapture {
         processor.setProcessor(this);
 
         try {
-            // Usar selectorTester com webhook especial que processa em tempo real
+            // Usar testSelectors com webhook especial que processa em tempo real
             await testSelectors({
                 userId: this.userId,
                 accountId: this.accountId,
@@ -196,13 +196,21 @@ class RealTimeCapture {
 
 class RealTimeOrchestrator {
     private outputDir: string;
-    private stats = {
+    public stats = {
         extracted: 0,
         filtered: 0,
         processed: 0,
         failed: 0,
         startTime: new Date().toISOString()
     };
+    private userId: string | null = null;
+    private accountId: string | null = null;
+
+    // Variáveis para acumular estatísticas totais
+    private totalExtracted: number = 0;
+    private totalFiltered: number = 0;
+    private totalProcessed: number = 0;
+    private totalFailures: number = 0;
 
     constructor() {
         this.outputDir = path.join(process.cwd(), "output", "realtime");
@@ -222,61 +230,77 @@ class RealTimeOrchestrator {
             return;
         }
 
-        const { userId, accountId } = testIds;
+        this.userId = testIds.userId;
+        this.accountId = testIds.accountId;
 
         // Processar cada grupo sequencialmente
         for (const groupUrl of GROUP_URLS) {
-            await this.processGroupWithDualWebhooks(groupUrl, userId, accountId);
+            await this.processGroupWithDualWebhooks(groupUrl);
         }
 
         this.showFinalStats();
     }
 
-    private async processGroupWithDualWebhooks(groupUrl: string, userId: string, accountId: string) {
-        const groupName = new URL(groupUrl).pathname.split('/')[2] || 'unknown';
-        console.log(`\n[GRUPO-${groupName}] 🚀 Iniciando processamento em TEMPO REAL...`);
+    private extractGroupId(url: string): string {
+        return new URL(url).pathname.split('/')[2] || 'unknown';
+    }
+
+    async processGroupWithDualWebhooks(groupUrl: string): Promise<void> {
+        const groupId = this.extractGroupId(groupUrl);
+        console.log(`[GRUPO-${groupId}] 🚀 Iniciando processamento em TEMPO REAL...`);
+        console.log(`[GRUPO-${groupId}] ⚡ Iniciando extração e processamento em tempo real...`);
 
         const groupResults = {
-            groupName,
-            groupUrl,
-            approvedPosts: [],
-            processedPosts: [],
+            groupName: groupId,
+            groupUrl: groupUrl,
+            processedAt: new Date().toISOString(),
             stats: {
                 extracted: 0,
                 approved: 0,
                 processed: 0,
                 failed: 0
             },
-            processedAt: new Date().toISOString()
+            approvedPosts: [],
+            processedPosts: []
         };
 
         try {
-            // Usar RealTimeCapture que processa cada post imediatamente
-            console.log(`[GRUPO-${groupName}] ⚡ Iniciando extração e processamento em tempo real...`);
-
             const realTimeCapture = new RealTimeCapture(
-                userId,
-                accountId,
+                this.userId!,
+                this.accountId!,
                 groupUrl,
                 groupResults,
                 this
             );
 
-            // Executar o processamento em tempo real
             await realTimeCapture.startRealTimeProcessing(MAX_POSTS_PER_GROUP);
 
-            // Salvar apenas um JSON consolidado se houver posts aprovados
-            if (groupResults.approvedPosts.length > 0) {
+            console.log(`[GRUPO-${groupId}] ✅ Posts extraídos: ${groupResults.stats.extracted}`);
+            console.log(`[GRUPO-${groupId}] 🔍 Posts aprovados: ${groupResults.stats.approved}`);
+            console.log(`[GRUPO-${groupId}] ✅ Posts processados: ${groupResults.stats.processed}`);
+
+            // Acumular resultados
+            this.totalExtracted += groupResults.stats.extracted;
+            this.totalFiltered += groupResults.stats.approved;
+            this.totalProcessed += groupResults.stats.processed;
+            this.totalFailures += groupResults.stats.failed;
+
+            // Salvar resultados se houver posts processados
+            if (groupResults.stats.processed > 0) {
                 await this.saveGroupResults(groupResults);
             } else {
-                console.log(`[GRUPO-${groupName}] ⚠️ Nenhum post foi aprovado no filtro. Nenhum arquivo será salvo.`);
+                console.log(`[GRUPO-${groupId}] ⚠️ Nenhum post foi processado. Nenhum arquivo será salvo.`);
             }
 
         } catch (error) {
-            console.error(`[GRUPO-${groupName}] ❌ Erro geral:`, error);
+            console.error(`[GRUPO-${groupId}] ❌ Erro geral:`, error);
+            this.totalFailures++;
+        } finally {
+            // Salvar sessão antes de processar próximo grupo
+            const { saveContextSession } = await import('../../../src/core/automations/facebook/session/context');
+            await saveContextSession(this.accountId!);
+            console.log(`[GRUPO-${groupId}] 🏁 Processamento finalizado`);
         }
-
-        console.log(`[GRUPO-${groupName}] 🏁 Processamento finalizado`);
     }
 
     public async callFilterWebhook(post: PostData & { groupUrl: string }): Promise<FilterResponse> {
@@ -284,18 +308,16 @@ class RealTimeOrchestrator {
             console.log(`[FILTRO] 🔄 Enviando para análise: ${post.authorName}`);
 
             // Formato correto esperado pelo n8n workflow
+            // CÓDIGO CORRIGIDO E LIMPO
             const payload = {
-                body: {
-                    data: {
-                        postId: post.postId,
-                        permalink: post.permalink,
-                        authorName: post.authorName,
-                        text: post.text
-                    }
+                data: { // <-- Enviando os dados diretamente
+                    postId: post.postId,
+                    permalink: post.permalink,
+                    authorName: post.authorName,
+                    text: post.text
                 },
                 timestamp: new Date().toISOString()
             };
-
             const response = await fetch(FILTER_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -444,10 +466,10 @@ class RealTimeOrchestrator {
         console.log('\n📊 RESULTADOS FINAIS');
         console.log('====================');
         console.log(`⏱️ Duração: ${Math.round(duration)}s`);
-        console.log(`📥 Posts extraídos: ${this.stats.extracted}`);
-        console.log(`🔍 Posts filtrados: ${this.stats.filtered}`);
-        console.log(`✅ Posts processados: ${this.stats.processed}`);
-        console.log(`❌ Falhas: ${this.stats.failed}`);
+        console.log(`📥 Posts extraídos: ${this.totalExtracted}`);
+        console.log(`🔍 Posts filtrados: ${this.totalFiltered}`);
+        console.log(`✅ Posts processados: ${this.totalProcessed}`);
+        console.log(`❌ Falhas: ${this.totalFailures}`);
         console.log(`📁 Arquivos salvos em: ${this.outputDir}`);
         console.log('====================');
     }
