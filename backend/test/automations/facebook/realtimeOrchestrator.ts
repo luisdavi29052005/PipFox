@@ -16,11 +16,8 @@ const GROUP_URLS = [
 
 const RUN_HEADLESS = false;
 
-// WEBHOOK 1: Filtro de gênero (análise inicial)
-const FILTER_WEBHOOK_URL = "http://localhost:5678/webhook/fb-bot-repl";
-
-// WEBHOOK 2: Geração de comentário personalizado 
-const COMMENT_WEBHOOK_URL = "http://localhost:5678/webhook/comment-generator";
+// WEBHOOK ÚNICO: Filtro + geração de comentário em um só workflow
+const UNIFIED_WEBHOOK_URL = "http://localhost:5678/webhook/fb-bot-repl";
 
 const MAX_POSTS_PER_GROUP = 10;
 
@@ -28,19 +25,16 @@ const MAX_POSTS_PER_GROUP = 10;
 // TIPOS E INTERFACES
 // =============================================================================
 
-interface FilterResponse {
+interface UnifiedWebhookResponse {
     shouldComment: boolean;
+    comment?: string;
     data?: {
         nome: string;
         permalink: string;
         texto: string;
         genero: string;
     };
-}
-
-interface CommentResponse {
-    comment: string;
-    success: boolean;
+    success?: boolean;
 }
 
 // =============================================================================
@@ -106,86 +100,71 @@ class RealTimeCapture {
         }
 
         try {
-            // ETAPA 1: Filtrar no N8N imediatamente
-            console.log(`[TEMPO-REAL] 🔍 Analisando post: ${post.authorName}`);
-            const filterResult = await this.orchestrator.callFilterWebhook(post);
+            // ETAPA ÚNICA: Processar no N8N (filtro + geração de comentário)
+            console.log(`[TEMPO-REAL] 🔍 Enviando para análise completa: ${post.authorName}`);
+            const webhookResult = await this.orchestrator.callUnifiedWebhook(post);
 
-            if (filterResult.shouldComment && filterResult.data) {
-                const approvedPost = { ...post, filterData: filterResult.data };
+            if (webhookResult.shouldComment && webhookResult.comment && webhookResult.data) {
+                const approvedPost = { ...post, filterData: webhookResult.data };
                 this.groupResults.approvedPosts.push(approvedPost);
                 this.orchestrator.stats.filtered++;
                 this.groupResults.stats.approved++;
 
-                console.log(`[TEMPO-REAL] ✅ Post aprovado: ${post.authorName} (${filterResult.data.genero})`);
+                console.log(`[APROVADO] ✅ ${post.authorName} (${webhookResult.data.genero})`);
+                console.log(`[IA] ✅ Comentário gerado: "${webhookResult.comment.substring(0, 80)}..."`);
+                console.log(`[PROCESSADOR] 🚀 Iniciando comentário no Facebook...`);
 
-                // ETAPA 2: Processar imediatamente se aprovado
-                try {
-                    console.log(`[TEMPO-REAL] 🤖 Processando imediatamente: ${post.postId}`);
-
-                    // Gerar comentário personalizado
-                    const commentResult = await this.orchestrator.callCommentWebhook(filterResult.data);
-
-                    if (commentResult.success && commentResult.comment) {
-                        console.log(`[TEMPO-REAL] 💬 Comentário gerado: "${commentResult.comment.substring(0, 50)}..."`);
-
-                        // Comentar no post
-                        const processingOptions: PostProcessorOptions = {
-                            userId: this.userId,
-                            accountId: this.accountId,
-                            headless: RUN_HEADLESS,
-                            commentMessage: commentResult.comment,
-                            post: {
-                                postId: post.postId,
-                                permalink: post.permalink,
-                                authorName: post.authorName,
-                                text: post.text,
-                                imageUrls: post.imageUrls || []
-                            }
-                        };
-
-                        const result = await runPostProcessing(processingOptions);
-
-                        const processedPost = {
-                            ...approvedPost,
-                            comment: commentResult,
-                            processing: result,
-                            processedAt: new Date().toISOString()
-                        };
-
-                        if (result.success) {
-                            this.orchestrator.stats.processed++;
-                            this.groupResults.stats.processed++;
-                            this.groupResults.processedPosts.push(processedPost);
-                            console.log(`[TEMPO-REAL] ✅ Post ${post.postId} comentado com sucesso`);
-                        } else {
-                            this.orchestrator.stats.failed++;
-                            this.groupResults.stats.failed++;
-                            processedPost.processing.failed = true;
-                            this.groupResults.processedPosts.push(processedPost);
-                            console.log(`[TEMPO-REAL] ❌ Falha ao comentar post ${post.postId}: ${result.error}`);
-                        }
-
-                        // Pausa entre processamentos
-                        await this.orchestrator.sleep(this.orchestrator.rand(5000, 10000));
-
-                    } else {
-                        this.orchestrator.stats.failed++;
-                        this.groupResults.stats.failed++;
-                        console.log(`[TEMPO-REAL] ❌ Falha ao gerar comentário para ${post.postId}`);
+                // Comentar no post
+                const processingOptions: PostProcessorOptions = {
+                    userId: this.userId,
+                    accountId: this.accountId,
+                    headless: RUN_HEADLESS,
+                    commentMessage: webhookResult.comment,
+                    post: {
+                        postId: post.postId,
+                        permalink: post.permalink,
+                        authorName: post.authorName,
+                        text: post.text,
+                        imageUrls: post.imageUrls || []
                     }
+                };
 
-                } catch (error) {
+                const result = await runPostProcessing(processingOptions);
+
+                const processedPost = {
+                    ...approvedPost,
+                    comment: { comment: webhookResult.comment, success: true },
+                    processing: result,
+                    processedAt: new Date().toISOString()
+                };
+
+                if (result.success) {
+                    this.orchestrator.stats.processed++;
+                    this.groupResults.stats.processed++;
+                    this.groupResults.processedPosts.push(processedPost);
+                    console.log(`[SUCESSO] ✅ Post comentado: ${post.authorName} - "${webhookResult.comment.substring(0, 50)}..."`);
+                } else {
                     this.orchestrator.stats.failed++;
                     this.groupResults.stats.failed++;
-                    console.error(`[TEMPO-REAL] ❌ Erro ao processar post ${post.postId}:`, error);
+                    processedPost.processing.failed = true;
+                    this.groupResults.processedPosts.push(processedPost);
+                    console.log(`[ERRO] ❌ Falha ao comentar: ${result.error}`);
                 }
 
+                // Pausa entre processamentos
+                await this.orchestrator.sleep(this.orchestrator.rand(5000, 10000));
+
             } else {
-                console.log(`[TEMPO-REAL] ❌ Post rejeitado: ${post.authorName}`);
+                console.log(`[TEMPO-REAL] ❌ Post rejeitado ou sem comentário: ${post.authorName}`);
+                if (webhookResult.data) {
+                    console.log(`[FILTRO] Motivo: gênero "${webhookResult.data.genero}" ou comentário vazio`);
+                }
             }
 
         } catch (error) {
-            console.error(`[TEMPO-REAL] ❌ Erro ao filtrar post ${post.postId}:`, error);
+            console.error(`[TEMPO-REAL] ❌ Erro ao processar post ${post.postId}:`, error);
+            this.orchestrator.stats.failed++;
+            this.groupResults.stats.failed++;
         }
     }
 }
@@ -220,8 +199,8 @@ class RealTimeOrchestrator {
     }
 
     async start() {
-        console.log("--- Orchestrator v7.0 (Clean Dual Webhook) ---");
-        console.log("Fluxo: Extração → Filtro N8N → Processamento → Comentário N8N");
+        console.log("--- Orchestrator v8.0 (Unified Webhook) ---");
+        console.log("Fluxo: Extração → N8N Unificado (Filtro + IA) → Processamento");
         console.log("---------------------------------\n");
 
         const testIds = await getTestIds();
@@ -297,129 +276,95 @@ class RealTimeOrchestrator {
             this.totalFailures++;
         } finally {
             // Salvar sessão antes de processar próximo grupo
-            const { saveContextSession } = await import('../../../src/core/automations/facebook/session/context');
-            await saveContextSession(this.accountId!);
+            try {
+                const { saveContextSession } = await import('../../../src/core/automations/facebook/session/context');
+                if (saveContextSession) {
+                    await saveContextSession(this.accountId!);
+                }
+            } catch (error) {
+                console.log(`[GRUPO-${groupId}] ⚠️ Não foi possível salvar sessão:`, error);
+            }
             console.log(`[GRUPO-${groupId}] 🏁 Processamento finalizado`);
         }
     }
 
-    public async callFilterWebhook(post: PostData & { groupUrl: string }): Promise<FilterResponse> {
+    public async callUnifiedWebhook(extractedData: PostData): Promise<UnifiedWebhookResponse> {
         try {
-            console.log(`[FILTRO] 🔄 Enviando para análise: ${post.authorName}`);
-
-            // Formato correto esperado pelo n8n workflow
-            // CÓDIGO CORRIGIDO E LIMPO
             const payload = {
-                data: { // <-- Enviando os dados diretamente
-                    postId: post.postId,
-                    permalink: post.permalink,
-                    authorName: post.authorName,
-                    text: post.text
+                data: {
+                    postId: extractedData.postId,
+                    permalink: extractedData.permalink,
+                    authorName: extractedData.authorName,
+                    text: extractedData.text,
+                    groupUrl: extractedData.groupUrl
                 },
                 timestamp: new Date().toISOString()
             };
-            const response = await fetch(FILTER_WEBHOOK_URL, {
+
+            console.log(`[WEBHOOK] 🔄 Enviando para análise unificada: ${extractedData.authorName}`);
+            console.log(`[WEBHOOK] 📝 Texto: "${extractedData.text.substring(0, 100)}..."`);
+
+            const response = await fetch(UNIFIED_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                timeout: 45000 // 45 segundos para processamento completo
             });
 
             if (!response.ok) {
+                console.log(`[WEBHOOK] ❌ Webhook retornou status ${response.status}`);
                 throw new Error(`Webhook respondeu com status ${response.status}`);
             }
 
-            // Tentar fazer parse da resposta
-            let result;
             const responseText = await response.text();
+            console.log(`[WEBHOOK] 📥 Resposta bruta: "${responseText}"`);
 
+            let result;
             try {
                 result = JSON.parse(responseText);
+                console.log(`[WEBHOOK] 📋 Resposta parseada:`, result);
             } catch (parseError) {
-                // Se não conseguir fazer parse, pode ser uma lista vazia ou resposta inválida
-                console.log(`[FILTRO] ⚠️ Resposta não é JSON válido: "${responseText}"`);
+                console.log(`[WEBHOOK] ⚠️ Resposta não é JSON válido: "${responseText}"`);
                 return { shouldComment: false };
             }
 
-            // Verificar se o resultado indica que deve comentar (genero === "homem")
-            if (result && Array.isArray(result) && result.length > 0) {
-                const data = result[0];
-                console.log(`[FILTRO] ✅ Post aprovado pelo N8N:`, data);
+            // Processar a resposta unificada
+            if (result.shouldComment !== false && result.genero && result.genero.toLowerCase() === 'homem' && result.comment) {
+                console.log(`[WEBHOOK] ✅ Aprovado: ${result.nome || extractedData.authorName} (${result.genero})`);
+                console.log(`[WEBHOOK] 💬 Comentário: "${result.comment.substring(0, 80)}..."`);
+
                 return {
                     shouldComment: true,
+                    comment: result.comment,
                     data: {
-                        nome: data.nome || post.authorName,
-                        permalink: data.permalink || post.permalink,
-                        texto: data.texto || post.text,
-                        genero: data.genero || 'homem'
-                    }
+                        nome: result.nome || extractedData.authorName,
+                        permalink: result.permalink || extractedData.permalink,
+                        texto: result.texto || extractedData.text,
+                        genero: result.genero
+                    },
+                    success: true
                 };
             } else {
-                console.log(`[FILTRO] ❌ Post rejeitado pelo N8N (lista vazia ou gênero não é homem)`);
-                return { shouldComment: false };
-            }
+                const motivo = !result.genero ? 'gênero não identificado' :
+                    result.genero.toLowerCase() !== 'homem' ? `gênero: ${result.genero}` :
+                        !result.comment ? 'sem comentário gerado' : 'condições não atendidas';
+                console.log(`[WEBHOOK] ❌ Rejeitado: ${extractedData.authorName} (${motivo})`);
 
-        } catch (error) {
-            console.error('[FILTRO] ❌ Erro na chamada do webhook:', error);
-            return { shouldComment: false };
-        }
-    }
-
-    public async callCommentWebhook(filterData: any): Promise<CommentResponse> {
-        try {
-            console.log(`[COMENTÁRIO] 🔄 Gerando comentário personalizado para: ${filterData.nome}`);
-
-            const payload = {
-                body: {
-                    data: {
-                        nome: filterData.nome,
-                        permalink: filterData.permalink,
-                        texto: filterData.texto,
-                        genero: filterData.genero
-                    }
-                },
-                timestamp: new Date().toISOString()
-            };
-
-            const response = await fetch(COMMENT_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error(`Webhook respondeu com status ${response.status}`);
-            }
-
-            let result;
-            const responseText = await response.text();
-
-            try {
-                result = JSON.parse(responseText);
-            } catch (parseError) {
-                console.log(`[COMENTÁRIO] ⚠️ Resposta não é JSON válido, usando comentário padrão`);
                 return {
-                    success: true,
-                    comment: `Olá ${filterData.nome}! 👋 Posso ajudar você com isso! 😊`
+                    shouldComment: false,
+                    data: result.genero ? {
+                        nome: result.nome || extractedData.authorName,
+                        permalink: result.permalink || extractedData.permalink,
+                        texto: result.texto || extractedData.text,
+                        genero: result.genero
+                    } : undefined
                 };
             }
 
-            const comment = result.comment ||
-                result.message ||
-                `Olá ${filterData.nome}! 👋 Posso ajudar você com isso! 😊`;
-
-            console.log(`[COMENTÁRIO] ✅ Comentário gerado: "${comment.substring(0, 50)}..."`);
-
-            return {
-                success: true,
-                comment: comment
-            };
-
         } catch (error) {
-            console.error('[COMENTÁRIO] ❌ Erro na geração do comentário:', error);
-            return {
-                success: true,
-                comment: `Olá ${filterData.nome}! 👋 Posso ajudar você com isso! 😊` // Fallback personalizado
-            };
+            console.error('[WEBHOOK] ❌ Erro na comunicação com N8N:', error);
+            console.log(`[WEBHOOK] 🔧 Verifique se o N8N está rodando e o webhook está ativo em: ${UNIFIED_WEBHOOK_URL}`);
+            return { shouldComment: false };
         }
     }
 
@@ -440,10 +385,9 @@ class RealTimeOrchestrator {
                     groupName: groupResults.groupName,
                     groupUrl: groupResults.groupUrl,
                     processedAt: groupResults.processedAt,
-                    filterWebhookUrl: FILTER_WEBHOOK_URL,
-                    commentWebhookUrl: COMMENT_WEBHOOK_URL,
-                    orchestratorVersion: "v7.0",
-                    flowType: "Extração → Filtro N8N → Processamento → Comentário N8N"
+                    unifiedWebhookUrl: UNIFIED_WEBHOOK_URL,
+                    orchestratorVersion: "v8.0",
+                    flowType: "Extração → N8N Unificado (Filtro + IA) → Processamento"
                 },
                 stats: groupResults.stats,
                 results: {
@@ -480,6 +424,56 @@ class RealTimeOrchestrator {
 
     public rand(min: number, max: number): number {
         return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+}
+
+async function sendToWebhook(url: string, data: any): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            return {
+                success: false,
+                error: `HTTP ${response.status}: ${response.statusText}`
+            };
+        }
+
+        const responseText = await response.text();
+
+        if (!responseText.trim()) {
+            return {
+                success: false,
+                error: 'Resposta vazia do webhook'
+            };
+        }
+
+        // Tentar fazer parse do JSON
+        try {
+            const jsonData = JSON.parse(responseText);
+            return {
+                success: true,
+                data: jsonData
+            };
+        } catch (parseError) {
+            // Se não conseguir fazer parse, retornar como string
+            console.log(`[Webhook] ⚠️ Resposta não é JSON válido, tratando como texto: "${responseText}"`);
+            return {
+                success: true,
+                data: responseText
+            };
+        }
+
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+        };
     }
 }
 
