@@ -12,7 +12,7 @@ async function main() {
       process.exit(1);
     }
 
-    const maxPosts = defaultMaxPosts || 1000;
+    const maxPosts = defaultMaxPosts || 2000;
 
     console.log("\n🧪 INICIANDO BATERIA DE TESTES");
     console.log("================================");
@@ -30,10 +30,8 @@ async function main() {
       
       const groupUrls = [
         "https://www.facebook.com/groups/940840924057399",
-        "https://www.facebook.com/groups/301237675753904",
-        "https://www.facebook.com/groups/1218045145877129",
-        "https://www.facebook.com/groups/893244264855034"
-        // Adicione mais URLs de grupos aqui
+
+
       ];
       
       const specificGroup = process.argv.find(arg => arg.startsWith("http"));
